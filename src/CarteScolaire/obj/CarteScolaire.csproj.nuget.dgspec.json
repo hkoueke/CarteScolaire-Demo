@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\wansi\\source\\repos\\CarteScolaireDemo\\src\\CarteScolaire\\CarteScolaire.csproj": {}
+    "C:\\Users\\wansi\\source\\repos\\CarteScolaire-Demo\\src\\CarteScolaire\\CarteScolaire.csproj": {}
   },
   "projects": {
-    "C:\\Users\\wansi\\source\\repos\\CarteScolaireDemo\\src\\CarteScolaire.DataImpl\\CarteScolaire.DataImpl.csproj": {
+    "C:\\Users\\wansi\\source\\repos\\CarteScolaire-Demo\\src\\CarteScolaire.DataImpl\\CarteScolaire.DataImpl.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\wansi\\source\\repos\\CarteScolaireDemo\\src\\CarteScolaire.DataImpl\\CarteScolaire.DataImpl.csproj",
+        "projectUniqueName": "C:\\Users\\wansi\\source\\repos\\CarteScolaire-Demo\\src\\CarteScolaire.DataImpl\\CarteScolaire.DataImpl.csproj",
         "projectName": "CarteScolaire.DataImpl",
-        "projectPath": "C:\\Users\\wansi\\source\\repos\\CarteScolaireDemo\\src\\CarteScolaire.DataImpl\\CarteScolaire.DataImpl.csproj",
+        "projectPath": "C:\\Users\\wansi\\source\\repos\\CarteScolaire-Demo\\src\\CarteScolaire.DataImpl\\CarteScolaire.DataImpl.csproj",
         "packagesPath": "C:\\Users\\wansi\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\wansi\\source\\repos\\CarteScolaireDemo\\src\\CarteScolaire.DataImpl\\obj\\",
+        "outputPath": "C:\\Users\\wansi\\source\\repos\\CarteScolaire-Demo\\src\\CarteScolaire.DataImpl\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -32,8 +32,8 @@
           "net9.0": {
             "targetAlias": "net9.0",
             "projectReferences": {
-              "C:\\Users\\wansi\\source\\repos\\CarteScolaireDemo\\src\\CarteScolaire.Data\\CarteScolaire.Data.csproj": {
-                "projectPath": "C:\\Users\\wansi\\source\\repos\\CarteScolaireDemo\\src\\CarteScolaire.Data\\CarteScolaire.Data.csproj"
+              "C:\\Users\\wansi\\source\\repos\\CarteScolaire-Demo\\src\\CarteScolaire.Data\\CarteScolaire.Data.csproj": {
+                "projectPath": "C:\\Users\\wansi\\source\\repos\\CarteScolaire-Demo\\src\\CarteScolaire.Data\\CarteScolaire.Data.csproj"
               }
             }
           }
@@ -99,14 +99,14 @@
         }
       }
     },
-    "C:\\Users\\wansi\\source\\repos\\CarteScolaireDemo\\src\\CarteScolaire.Data\\CarteScolaire.Data.csproj": {
+    "C:\\Users\\wansi\\source\\repos\\CarteScolaire-Demo\\src\\CarteScolaire.Data\\CarteScolaire.Data.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\wansi\\source\\repos\\CarteScolaireDemo\\src\\CarteScolaire.Data\\CarteScolaire.Data.csproj",
+        "projectUniqueName": "C:\\Users\\wansi\\source\\repos\\CarteScolaire-Demo\\src\\CarteScolaire.Data\\CarteScolaire.Data.csproj",
         "projectName": "CarteScolaire.Data",
-        "projectPath": "C:\\Users\\wansi\\source\\repos\\CarteScolaireDemo\\src\\CarteScolaire.Data\\CarteScolaire.Data.csproj",
+        "projectPath": "C:\\Users\\wansi\\source\\repos\\CarteScolaire-Demo\\src\\CarteScolaire.Data\\CarteScolaire.Data.csproj",
         "packagesPath": "C:\\Users\\wansi\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\wansi\\source\\repos\\CarteScolaireDemo\\src\\CarteScolaire.Data\\obj\\",
+        "outputPath": "C:\\Users\\wansi\\source\\repos\\CarteScolaire-Demo\\src\\CarteScolaire.Data\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -164,14 +164,14 @@
         }
       }
     },
-    "C:\\Users\\wansi\\source\\repos\\CarteScolaireDemo\\src\\CarteScolaire\\CarteScolaire.csproj": {
+    "C:\\Users\\wansi\\source\\repos\\CarteScolaire-Demo\\src\\CarteScolaire\\CarteScolaire.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\wansi\\source\\repos\\CarteScolaireDemo\\src\\CarteScolaire\\CarteScolaire.csproj",
+        "projectUniqueName": "C:\\Users\\wansi\\source\\repos\\CarteScolaire-Demo\\src\\CarteScolaire\\CarteScolaire.csproj",
         "projectName": "CarteScolaire",
-        "projectPath": "C:\\Users\\wansi\\source\\repos\\CarteScolaireDemo\\src\\CarteScolaire\\CarteScolaire.csproj",
+        "projectPath": "C:\\Users\\wansi\\source\\repos\\CarteScolaire-Demo\\src\\CarteScolaire\\CarteScolaire.csproj",
         "packagesPath": "C:\\Users\\wansi\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\wansi\\source\\repos\\CarteScolaireDemo\\src\\CarteScolaire\\obj\\",
+        "outputPath": "C:\\Users\\wansi\\source\\repos\\CarteScolaire-Demo\\src\\CarteScolaire\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -192,8 +192,8 @@
           "net9.0": {
             "targetAlias": "net9.0",
             "projectReferences": {
-              "C:\\Users\\wansi\\source\\repos\\CarteScolaireDemo\\src\\CarteScolaire.DataImpl\\CarteScolaire.DataImpl.csproj": {
-                "projectPath": "C:\\Users\\wansi\\source\\repos\\CarteScolaireDemo\\src\\CarteScolaire.DataImpl\\CarteScolaire.DataImpl.csproj"
+              "C:\\Users\\wansi\\source\\repos\\CarteScolaire-Demo\\src\\CarteScolaire.DataImpl\\CarteScolaire.DataImpl.csproj": {
+                "projectPath": "C:\\Users\\wansi\\source\\repos\\CarteScolaire-Demo\\src\\CarteScolaire.DataImpl\\CarteScolaire.DataImpl.csproj"
               }
             }
           }

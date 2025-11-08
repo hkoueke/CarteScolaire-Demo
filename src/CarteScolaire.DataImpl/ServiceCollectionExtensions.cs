@@ -67,14 +67,28 @@ public static class ServiceCollectionExtensions
 
             config.AddStandardResilienceHandler(options =>
             {
+                // Retry Policy: 2 Attempts (Total 3 calls: 1 initial + 2 retries)
                 options.Retry.MaxRetryAttempts = 3;
                 options.Retry.BackoffType = Polly.DelayBackoffType.Exponential;
                 options.Retry.UseJitter = true;
-                options.CircuitBreaker.FailureRatio = 0.2;
+
+                // Attempt Timeout: Maximum time for a single HTTP request (20s)
                 options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(20);
-                options.CircuitBreaker.SamplingDuration = 2 * options.AttemptTimeout.Timeout; //AttemptTimeout x 2 at least
-                // Best Practice: Set TotalRequestTimeout > AttemptTimeout × (MaxRetryAttempts + 1)
-                options.TotalRequestTimeout.Timeout = options.AttemptTimeout.Timeout * (options.Retry.MaxRetryAttempts + 1.5); //+0.5 for buffer
+
+                // Circuit Breaker Policy: Opens if 20% of calls fail.
+                options.CircuitBreaker.FailureRatio = 0.2;
+
+                // Set the minimum number of requests (throughput) needed in the SamplingDuration 
+                // before the failure ratio calculation is performed.
+                options.CircuitBreaker.MinimumThroughput = 20;
+
+                // REVISED: Set sampling duration to a meaningful monitoring period (e.g., 60s)
+                options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(60);
+
+                // Total Timeout Policy: Max time for the entire operation (including retries).
+                // REVISED: Set a comfortable time, as 90s (from original calculation) may be too short
+                // due to Exponential Backoff and Jitter. 150 seconds is safer.
+                options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(150);
             });
 
         });

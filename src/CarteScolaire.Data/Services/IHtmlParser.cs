@@ -1,19 +1,23 @@
-﻿namespace CarteScolaire.Data.Services;
+﻿using CarteScolaire.Data.Responses;
+
+namespace CarteScolaire.Data.Services;
 
 /// <summary>
 /// A simple abstraction representing an HTML parser.
 /// </summary>
-/// <typeparam name="T">The type of the class into which the HTML will be parsed. This must be a reference type.</typeparam>
+/// <typeparam name="T">The type of the class into which the HTML will be parsed.
+/// This must be a reference type.</typeparam>
 public interface IHtmlParser<T> where T : notnull
 {
     /// <summary>
-    /// Asynchronously parses student information from HTML content using the specified XPath query.
+    /// Asynchronously parses data from an input stream.
     /// </summary>
-    /// <param name="stream">The input stream containing the HTML. Must not be <c>null</c>.</param>
+    /// <typeparam name="T">The type of the successful parsing result.</typeparam>
+    /// <param name="stream">The input stream containing the data to be parsed.</param>
     /// <param name="cancellationToken">Token to observe for cancellation. Optional.</param>
-    /// <returns>A task that represents the asynchronous operation. The task result contains a read-only collection of parsed <see cref="StudentInfoResponse"/> objects.</returns>
-    /// <exception cref="ArgumentNullException">Thrown if <paramref name="stream"/> is <c>null</c>.</exception>
-    /// <exception cref="OperationCanceledException">Thrown if the operation is canceled.</exception>
-    /// <exception cref="InvalidOperationException">Thrown if parsing the HTML fails.</exception>
-    public Task<IReadOnlyCollection<T>> ParseAsync(Stream stream, CancellationToken cancellationToken = default);
+    /// <returns>A task that represents the asynchronous operation. 
+    /// The task result contains a <see cref="Result{IReadOnlyCollection{T}}"/> indicating success with the parsed data 
+    /// or a failure with an error message.</returns>
+    public Task<Result<IReadOnlyCollection<T>>> ParseAsync(Stream stream, CancellationToken cancellationToken = default);
 }
+//todo: fix comments

@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using AngleSharp;
+using CarteScolaire.Data.Responses;
 using CarteScolaire.Data.Services;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -14,10 +15,14 @@ internal sealed class TokenProvider(
 {
     private readonly TokenProviderOptions _options = options.Value;
 
-    public async Task<string?> GetTokenAsync(CancellationToken cancellationToken = default)
+    public async Task<Result<string>> GetTokenAsync(CancellationToken cancellationToken = default)
     {
-        var baseAddress = httpClient.BaseAddress?.GetLeftPart(UriPartial.Authority) ??
-                          throw new InvalidOperationException("BaseAddress is not set on the HttpClient.");
+        var baseAddress = httpClient.BaseAddress;//?.GetLeftPart(UriPartial.Authority);
+
+        if (baseAddress is null)
+        {
+            return Result<string>.Failure("BaseAddress is not set on the HttpClient.");
+        }
 
         logger.LogInformation("Initiating fetch for CSRF token from {BaseAddress} at {Path}", baseAddress, _options.TokenEndpointPath);
 
@@ -26,44 +31,41 @@ internal sealed class TokenProvider(
         try
         {
             using var response = await httpClient
-                .GetAsync(_options.TokenEndpointPath, HttpCompletionOption.ResponseContentRead, cancellationToken)
+                .GetAsync(_options.TokenEndpointPath, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
                 .ConfigureAwait(false);
 
             if (!response.IsSuccessStatusCode)
             {
-                logger.LogWarning("Failed to retrieve page for CSRF token extraction from {BaseAddress}. HTTP status: {StatusCode} ({ReasonPhrase})",
-                    baseAddress, response.StatusCode, response.ReasonPhrase);
-                return null;
+                var httpError = $"Failed to retrieve page for CSRF token extraction. HTTP status: {response.StatusCode} [{response.ReasonPhrase}]";
+                logger.LogWarning("{ErrorMessage} from {BaseAddress}", httpError, baseAddress);
+                return Result<string>.Failure(httpError);
             }
 
-            logger.LogDebug("Page retrieved successfully from {BaseAddress} in {@ResponseTime}. Content length: {ContentLength} bytes",
-                baseAddress, sw.Elapsed, response.Content.Headers.ContentLength ?? -1);
-
             using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-
             using var document = await browsingContext
                 .OpenAsync(req => req.Content(stream), cancellationToken)
                 .ConfigureAwait(false);
 
             logger.LogDebug("HTML document parsed successfully in {@ParseTime}", sw.Elapsed);
 
-            // Use the configured selector
             var tokenElement = document.QuerySelector(_options.TokenSelector);
             if (tokenElement is null)
             {
-                logger.LogWarning("CSRF token input element not found in parsed HTML from {BaseAddress}. Selector: {Selector}",
-                    baseAddress, _options.TokenSelector);
-                return null;
+                var selectorError = $"CSRF token input element not found. Selector: {_options.TokenSelector}";
+                logger.LogWarning("{ErrorMessage} at {BaseAddress}", selectorError, baseAddress);
+                return Result<string>.Failure(selectorError);
             }
 
             var token = tokenElement.GetAttribute("value");
             if (string.IsNullOrWhiteSpace(token))
             {
-                logger.LogWarning("CSRF token element found but value is empty or missing in HTML from {BaseAddress}", baseAddress);
-                return null;
+                var valueError = "CSRF token element found but value is empty or missing.";
+                logger.LogWarning("{ErrorMessage} at {BaseAddress}", valueError, baseAddress);
+                return Result<string>.Failure(valueError);
             }
 
             var tokenPrefix = token.Length >= 6 ? $"{token[..6]}..." : "## REDACTED ##";
+            sw.Stop();
 
             logger.LogInformation("CSRF token successfully extracted from {BaseAddress} in {@TotalTime}. Prefix: {TokenPrefix}, Length: {TokenLength}",
                 baseAddress, sw.Elapsed, tokenPrefix, token.Length);
@@ -72,16 +74,17 @@ internal sealed class TokenProvider(
         }
         catch (Exception ex)
         {
+            sw.Stop();
             var errorMessage = ex switch
             {
                 HttpRequestException => $"Network error while fetching page for CSRF token from {baseAddress}",
-                TaskCanceledException when cancellationToken.IsCancellationRequested => $"Token fetch canceled by request from {baseAddress}",
-                TaskCanceledException => $"Timeout while fetching page for CSRF token from {baseAddress}",
+                OperationCanceledException => $"Token fetch from {baseAddress} was canceled.",
                 _ => $"Unexpected error during CSRF token extraction from {baseAddress}"
             };
 
-            logger.LogError(ex, errorMessage);
-            throw;
+            logger.LogError(ex, "{ErrorMessage} - Elapsed: {@Time}", errorMessage, sw.Elapsed);
+
+            return Result<string>.Failure(errorMessage);
         }
     }
 }

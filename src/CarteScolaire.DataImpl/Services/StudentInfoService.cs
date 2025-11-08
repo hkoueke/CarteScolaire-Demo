@@ -6,28 +6,47 @@ using CarteScolaire.Data.Services;
 
 namespace CarteScolaire.DataImpl.Services;
 
-internal sealed class StudentInfoService(HttpClient httpClient, IHtmlParser<StudentInfoResponse> htmlParser) : IStudentInfoService
+internal sealed class StudentInfoService(
+    HttpClient httpClient, 
+    IHtmlParser<StudentInfoResponse> htmlParser) : IStudentInfoService
 {
-    public async Task<IReadOnlyCollection<StudentInfoResponse>> GetStudentInfoAsync(
-        StudentInfoQuery query, 
+    public async Task<Result<IReadOnlyCollection<StudentInfoResponse>>> GetStudentInfoAsync(
+        StudentInfoQuery query,
         CancellationToken cancellationToken = default)
     {
-        var uriBuilder = new UriBuilder(httpClient.BaseAddress ??
-            throw new InvalidOperationException("BaseAddress is not set on the HttpClient."));
+        if (httpClient.BaseAddress is null)
+        {
+            return Result<IReadOnlyCollection<StudentInfoResponse>>.Failure("BaseAddress is not set on the HttpClient.");
+        }
 
-        NameValueCollection parts = HttpUtility.ParseQueryString(uriBuilder.Query);
-        parts["student_name"] ??= query.Name;
-        parts["school_code"] ??= query.SchoolId;
+        try
+        {
+            NameValueCollection parts = HttpUtility.ParseQueryString(string.Empty);
+            parts["student_name"] = query.Name;
+            parts["school_code"] = query.SchoolId;
 
-        uriBuilder.Query = parts.ToString();
+            var uriBuilder = new UriBuilder(httpClient.BaseAddress)
+            {
+                Query = parts.ToString()
+            };
 
-        using HttpResponseMessage response =
-            await httpClient.GetAsync(uriBuilder.Uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            using HttpResponseMessage response = await httpClient.GetAsync(
+                uriBuilder.Uri,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
 
-        if (!response.IsSuccessStatusCode)
-            return [];
+            if (!response.IsSuccessStatusCode)
+            {
+                var httpError = $"Failed to retrieve data. Status code: {(int)response.StatusCode} {response.StatusCode} [{response.ReasonPhrase}]";
+                return Result<IReadOnlyCollection<StudentInfoResponse>>.Failure(httpError);
+            }
 
-        using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        return await htmlParser.ParseAsync(stream, cancellationToken).ConfigureAwait(false);
+            using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            return await htmlParser.ParseAsync(stream, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            return Result<IReadOnlyCollection<StudentInfoResponse>>.Failure($"An unexpected error occurred: {ex.Message}");
+        }
     }
 }

@@ -14,11 +14,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\wansi\\source\\repos\\CarteScolaireDemo\\src\\CarteScolaire.Data\\CarteScolaire.Data.csproj",
+      "projectUniqueName": "C:\\Users\\wansi\\source\\repos\\CarteScolaire-Demo\\src\\CarteScolaire.Data\\CarteScolaire.Data.csproj",
       "projectName": "CarteScolaire.Data",
-      "projectPath": "C:\\Users\\wansi\\source\\repos\\CarteScolaireDemo\\src\\CarteScolaire.Data\\CarteScolaire.Data.csproj",
+      "projectPath": "C:\\Users\\wansi\\source\\repos\\CarteScolaire-Demo\\src\\CarteScolaire.Data\\CarteScolaire.Data.csproj",
       "packagesPath": "C:\\Users\\wansi\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\wansi\\source\\repos\\CarteScolaireDemo\\src\\CarteScolaire.Data\\obj\\",
+      "outputPath": "C:\\Users\\wansi\\source\\repos\\CarteScolaire-Demo\\src\\CarteScolaire.Data\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
