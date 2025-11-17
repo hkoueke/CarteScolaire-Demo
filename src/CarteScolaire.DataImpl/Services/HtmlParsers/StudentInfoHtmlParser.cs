@@ -16,55 +16,47 @@ internal sealed class StudentInfoHtmlParser(
 {
     private readonly SelectorOptions _selectorOptions = options.Value;
 
-    public async Task<Result<IReadOnlyCollection<StudentInfoResponse>>> ParseAsync(
-        Stream stream, CancellationToken cancellationToken)
+    public async Task<Result<StudentInfoCollection>> ParseAsync(Stream stream, CancellationToken cancellationToken)
     {
-        if (stream is null)
-        {
-            return Result<IReadOnlyCollection<StudentInfoResponse>>.Failure("Input stream cannot be null.");
-        }
-
         var sw = Stopwatch.StartNew();
+
         try
         {
             using IDocument document = await browsingContext.OpenAsync(r => r.Content(stream), cancellationToken);
-            var elements = document.QuerySelectorAll(_selectorOptions.ResultSelector).ToArray();
+            var elements = document.QuerySelectorAll(_selectorOptions.ResultSelector);
 
-            if (elements.Length == 0)
-            {
-                return Result<IReadOnlyCollection<StudentInfoResponse>>.Failure("No matching items found");
-            }
-
-            var responses = elements.Select(ParseElement).ToList();
-
-            sw.Stop();
-            logger.LogDebug("HTML elements parsed successfully in {@Time}", sw.Elapsed);
-
-            return responses;
+            return
+                (elements.Length == 0
+                    ? Result<StudentInfoCollection>.Failure("No matching items found")
+                    : elements.Select(ParseElement).ToArray())
+                .OnSuccess(items => logger.LogDebug("{Count} HTML elements parsed successfully in {@Time}", items.Count, sw.Elapsed))
+                .OnFailure(error => logger.LogError("Failed to parse HTML stream. Reason: {Reason}.", error));
         }
         catch (Exception ex)
         {
-            // Catch all other exceptions and return a Failure result.
-            sw.Stop();
             logger.LogError(ex, "Failed to parse HTML stream.");
-            return Result<IReadOnlyCollection<StudentInfoResponse>>.Failure($"Parsing failed: {ex.Message}");
+            return Result<StudentInfoCollection>.Failure($"Parsing failed: {ex.Message}");
+        }
+        finally
+        {
+            sw.Stop();
         }
     }
 
     /// <summary>
     /// Helper to safely get and trim text content from a node.
     /// </summary>
-    private static string? GetCleanText(IElement node, string selector) => node.QuerySelector(selector)?.TextContent?.Trim();
+    private static string? GetCleanText(IElement node, string selector) => node.QuerySelector(selector)?.TextContent.Trim();
 
     private StudentInfoResponse ParseElement(IElement node)
     {
-        string registrationId = GetCleanText(node, _selectorOptions.RegistrationIdSelector) ?? "N/A";
-        string studentName = GetCleanText(node, _selectorOptions.NameSelector) ?? "N/A";
-        string schoolName = GetCleanText(node, _selectorOptions.SchoolNameSelector) ?? "N/A";
-        string studentClass = GetCleanText(node, _selectorOptions.GradeSelector) ?? "N/A";
-        string? dateOfBirthText = GetCleanText(node, _selectorOptions.DateOfBirthSelector);
-        string? genderText = GetCleanText(node, _selectorOptions.GenderSelector);
-        Gender gender = genderText?.ToUpperInvariant() switch
+        var registrationId = GetCleanText(node, _selectorOptions.RegistrationIdSelector) ?? "N/A";
+        var studentName = GetCleanText(node, _selectorOptions.NameSelector) ?? "N/A";
+        var schoolName = GetCleanText(node, _selectorOptions.SchoolNameSelector) ?? "N/A";
+        var studentClass = GetCleanText(node, _selectorOptions.GradeSelector) ?? "N/A";
+        var dateOfBirthText = GetCleanText(node, _selectorOptions.DateOfBirthSelector);
+        var genderText = GetCleanText(node, _selectorOptions.GenderSelector);
+        var gender = genderText?.ToUpperInvariant() switch
         {
             "M" => Gender.Male,
             "F" => Gender.Female,

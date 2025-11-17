@@ -3,7 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using CarteScolaire.Data.Responses;
+using Data.Responses;
 
 /// <summary>
 /// Extension methods for working with Result types.
@@ -14,21 +14,15 @@ public static class ResultExtensions
     /// Converts a nullable value to a Result.
     /// </summary>
     public static Result<T> ToResult<T>(this T? value, string errorMessage) where T : class
-    {
-        return value is not null
-            ? Result<T>.Success(value)
-            : Result<T>.Failure(errorMessage);
-    }
+        => value ?? Result<T>.Failure(errorMessage);
+
 
     /// <summary>
     /// Converts a nullable value type to a Result.
     /// </summary>
     public static Result<T> ToResult<T>(this T? value, string errorMessage) where T : struct
-    {
-        return value.HasValue
-            ? Result<T>.Success(value.Value)
-            : Result<T>.Failure(errorMessage);
-    }
+        => value ?? Result<T>.Failure(errorMessage);
+
 
     /// <summary>
     /// Executes an operation and wraps it in a Result, catching exceptions.
@@ -37,7 +31,23 @@ public static class ResultExtensions
     {
         try
         {
-            return Result<T>.Success(operation());
+            return operation();
+        }
+        catch (Exception ex)
+        {
+            var errorMessage = errorMapper?.Invoke(ex) ?? ex.Message;
+            return Result<T>.Failure(errorMessage);
+        }
+    }
+
+    /// <summary>
+    /// Executes an asynchronous operation and wraps it in a Result, catching exceptions.
+    /// </summary>
+    public static async Task<Result<T>> TryAsync<T>(Func<Task<Result<T>>> operation, Func<Exception, string>? errorMapper = null)
+    {
+        try
+        {
+            return await operation();
         }
         catch (Exception ex)
         {
@@ -58,6 +68,7 @@ public static class ResultExtensions
         // Using FirstOrDefault with a struct is dangerous, as default(Result<T>)
         // would report IsFailure = true, leading to a bug.
         // A simple loop is the safest and most correct way to find the first failure.
+        // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
         foreach (var result in resultsList)
         {
             if (result.IsFailure)

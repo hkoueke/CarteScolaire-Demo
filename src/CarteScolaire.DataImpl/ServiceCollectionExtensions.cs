@@ -28,7 +28,7 @@ public static class ServiceCollectionExtensions
             .ValidateDataAnnotations()
             .Configure(options =>
             {
-                options.TokenSelector = @"input[type='hidden'][name='_token']";
+                options.TokenSelector = "input[type='hidden'][name='_token']";
                 options.TokenEndpointPath = "/";
             });
 
@@ -68,7 +68,7 @@ public static class ServiceCollectionExtensions
             config.AddStandardResilienceHandler(options =>
             {
                 // Retry Policy: 2 Attempts (Total 3 calls: 1 initial + 2 retries)
-                options.Retry.MaxRetryAttempts = 3;
+                options.Retry.MaxRetryAttempts = 2;
                 options.Retry.BackoffType = Polly.DelayBackoffType.Exponential;
                 options.Retry.UseJitter = true;
 

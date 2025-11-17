@@ -13,8 +13,8 @@ public sealed class StudentInfoQuery
     /// <param name="name">The name of the student. It can be either full or partial.</param>
     public StudentInfoQuery(string schoolId, string name)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(schoolId, nameof(schoolId));
-        ArgumentException.ThrowIfNullOrWhiteSpace(name, nameof(name));
+        ArgumentException.ThrowIfNullOrWhiteSpace(schoolId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
         SchoolId = schoolId.ToUpper();
         Name = name.ToUpper();

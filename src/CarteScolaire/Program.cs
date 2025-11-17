@@ -1,5 +1,4 @@
 ﻿using CarteScolaire.Data.Queries;
-using CarteScolaire.Data.Responses;
 using CarteScolaire.Data.Services;
 using CarteScolaire.DataImpl;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,7 +11,7 @@ var host = Host
     {
         config.Enrich.FromLogContext()
               .WriteTo.Console()
-              .MinimumLevel.Debug();
+              .MinimumLevel.Information();
     })
     .ConfigureServices((_, services) =>
     {
@@ -20,24 +19,40 @@ var host = Host
     })
     .Build();
 
+using CancellationTokenSource tokenSource = new();
+
+Console.CancelKeyPress += (_, eventArgs) =>
+{
+    // Prevent the application from immediately terminating
+    eventArgs.Cancel = true;
+
+    Console.WriteLine("[Cancellation Requested: Ctrl+C pressed]");
+    // ReSharper disable once AccessToDisposedClosure
+    tokenSource.Cancel();
+};
+
+Console.WriteLine("Press Ctrl+C to cancel the operation.");
+
 try
 {
     var studentService = host.Services.GetRequiredService<IStudentInfoService>();
 
-    Result<IReadOnlyCollection<StudentInfoResponse>> result =
-        await studentService.GetStudentInfoAsync(new StudentInfoQuery("OU50130I12", "NSANGOU"));
+    var result =
+        await studentService.GetStudentInfoAsync(new StudentInfoQuery("OU50130I12", "NSANGOU"), tokenSource.Token);
 
-    if (result.IsFailure)
-        Console.WriteLine(result.Error);
-    else
-    {
-        Console.WriteLine($"Students found matching the criteria: {result.Value.Count}");
-        foreach (var item in result.Value) Console.WriteLine(item);
-    }
+    result.Match(
+        onSuccess: items =>
+        {
+            Console.WriteLine($"Students found matching the criteria: {items.Count}");
+            foreach (var item in items) Console.WriteLine(item);
+        },
+        onFailure: Console.WriteLine
+    );
+
 }
 catch (Exception ex)
 {
-    Console.WriteLine(ex.Message.ToUpperInvariant());
+    Console.WriteLine(ex.Message);
 }
 finally
 {

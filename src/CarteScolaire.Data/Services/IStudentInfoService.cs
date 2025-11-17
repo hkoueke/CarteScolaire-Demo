@@ -18,5 +18,5 @@ public interface IStudentInfoService
     /// which is either a success with a read-only collection of <see cref="StudentInfoResponse"/> 
     /// matching the criteria, or a failure with an error message.
     /// </returns>
-    public Task<Result<IReadOnlyCollection<StudentInfoResponse>>> GetStudentInfoAsync(StudentInfoQuery query, CancellationToken cancellationToken = default);
+    public Task<Result<StudentInfoCollection>> GetStudentInfoAsync(StudentInfoQuery query, CancellationToken cancellationToken = default);
 }

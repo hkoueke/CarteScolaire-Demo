@@ -1,9 +1,6 @@
 ﻿namespace CarteScolaire.Data.Responses;
 
-/// <summary>
-/// Represents the result of an operation that can either succeed with a value or fail with an error.
-/// </summary>
-/// <typeparam name="T">The type of the success value.</typeparam>
+
 using System.Diagnostics.CodeAnalysis;
 
 /// <summary>
@@ -25,7 +22,7 @@ public readonly struct Result<T>
 
     private Result(string error)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(error, nameof(error));
+        ArgumentException.ThrowIfNullOrWhiteSpace(error);
 
         // We must assign '_value'. We use 'default!' to suppress warnings,
         // as it will never be accessed in a failure state.
@@ -48,29 +45,16 @@ public readonly struct Result<T>
     /// <summary>
     /// Gets the success value. Throws if the result is a failure.
     /// </summary>
-    public T Value
-    {
-        get
-        {
-            if (!_isSuccess)
-                throw new InvalidOperationException($"Cannot access Value of a failed result. Error: {_error}");
-            return _value;
-        }
-    }
+    public T Value => !_isSuccess 
+        ? throw new InvalidOperationException($"Cannot access Value of a failed result. Error: {_error}") 
+        : _value;
 
     /// <summary>
     /// Gets the error message. Throws if the result is a success.
     /// </summary>
-    public string Error
-    {
-        get
-        {
-            if (_isSuccess)
-                throw new InvalidOperationException("Cannot access Error of a successful result.");
-
-            return _error!;
-        }
-    }
+    public string Error => _isSuccess
+        ? throw new InvalidOperationException("Cannot access Error of a successful result.")
+        : _error!;
 
     /// <summary>
     /// Creates a successful result.
@@ -97,30 +81,22 @@ public readonly struct Result<T>
     /// Returns a value based on success or failure.
     /// </summary>
     public TResult Match<TResult>(Func<T, TResult> onSuccess, Func<string, TResult> onFailure)
-    {
-        // We use '!' because we know _error is not null on failure.
-        return _isSuccess ? onSuccess(_value) : onFailure(_error!);
-    }
+        => _isSuccess ? onSuccess(_value) : onFailure(_error!);
+
 
     /// <summary>
     /// Maps the success value to a new type.
     /// </summary>
-    public Result<TResult> Map<TResult>(Func<T, TResult> mapper)
-    {
-        // We use '!' because we know _error is not null on failure.
-        return _isSuccess
-            ? Result<TResult>.Success(mapper(_value))
-            : Result<TResult>.Failure(_error!);
-    }
+    public Result<TResult> Map<TResult>(Func<T, TResult> mapper) =>
+        _isSuccess ? mapper(_value) : Result<TResult>.Failure(_error!);
+
 
     /// <summary>
     /// Flat maps the success value to a new Result.
     /// </summary>
-    public Result<TResult> Bind<TResult>(Func<T, Result<TResult>> binder)
-    {
-        // We use '!' because we know _error is not null on failure.
-        return _isSuccess ? binder(_value) : Result<TResult>.Failure(_error!);
-    }
+    public Result<TResult> Bind<TResult>(Func<T, Result<TResult>> binder) =>
+        _isSuccess ? binder(_value) : Result<TResult>.Failure(_error!);
+
 
     /// <summary>
     /// Executes an action if the result is successful.
@@ -138,7 +114,6 @@ public readonly struct Result<T>
     public Result<T> OnFailure(Action<string> action)
     {
         if (!_isSuccess)
-            // We use '!' because we know _error is not null on failure.
             action(_error!);
         return this;
     }
@@ -148,14 +123,13 @@ public readonly struct Result<T>
     /// </summary>
     public T GetValueOrDefault(T defaultValue = default!) => _isSuccess ? _value : defaultValue;
 
+
     /// <summary>
     /// Returns the value if successful, otherwise computes and returns a fallback value.
     /// </summary>
-    public T GetValueOrElse(Func<string, T> fallback)
-    {
-        // We use '!' because we know _error is not null on failure.
-        return _isSuccess ? _value : fallback(_error!);
-    }
+    public T GetValueOrElse(Func<string, T> fallback) => _isSuccess ? _value : fallback(_error!);
+
+
 
     /// <summary>
     /// Tries to get the value, returning true if successful.
@@ -165,7 +139,7 @@ public readonly struct Result<T>
     /// 'value' will be the success value or default(T) on failure.
     /// 'error' will be the error message or null on success.
     /// </remarks>
-    public bool TryGetValue([MaybeNullWhen(false)] out T value, [MaybeNullWhen(true)] out string? error)
+    public bool TryGetValue([MaybeNullWhen(false)] out T value, out string? error)
     {
         if (_isSuccess)
         {
@@ -184,12 +158,7 @@ public readonly struct Result<T>
     /// <summary>
     /// Converts the result to a string representation.
     /// </summary>
-    public override string ToString()
-    {
-        return _isSuccess
-            ? $"Success({_value})"
-            : $"Failure({_error})";
-    }
+    public override string ToString() => _isSuccess ? $"Success({_value})" : $"Failure({_error})";
 
     /// <summary>
     /// Implicitly converts a value to a successful Result.

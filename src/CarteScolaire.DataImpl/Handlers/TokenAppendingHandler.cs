@@ -1,14 +1,14 @@
 ﻿using System.Collections.Specialized;
-using System.Diagnostics.CodeAnalysis;
 using System.Web;
 using CarteScolaire.Data.Services;
+using CarteScolaire.DataImpl.Helpers;
 using Microsoft.Extensions.Logging;
 using ZiggyCreatures.Caching.Fusion;
 
 namespace CarteScolaire.DataImpl.Handlers;
 
 internal sealed class TokenAppendingHandler(
-    ITokenProvider<string> _tokenProvider,
+    ITokenProvider<string> tokenProvider,
     IFusionCache cache,
     ILogger<TokenAppendingHandler> logger) : DelegatingHandler
 {
@@ -16,53 +16,46 @@ internal sealed class TokenAppendingHandler(
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request.RequestUri);
-
-        string token;
-
-        try
+        if (request.RequestUri is null)
         {
-            token = await cache.GetOrSetAsync(
-                CacheKey,
-                async _ =>
+            logger.LogWarning("RequestUri is null. Ensure 'HttpClient.BaseAddress' is configured before sending requests.");
+            return CreateTokenFailureResponse("Invalid request: missing Request Uri.");
+        }
+
+        var result = await cache.GetOrSetAsync(
+            CacheKey,
+            async _ => await tokenProvider.GetTokenAsync(cancellationToken).ConfigureAwait(false),
+            options => options
+                .SetDuration(TimeSpan.FromHours(2))
+                .SetFailSafe(true)
+                .SetFactoryTimeouts(TimeSpan.FromSeconds(10))
+                .SetEagerRefresh(0.9f),
+            cancellationToken
+        );
+
+        return await result
+            .Ensure(token => !string.IsNullOrWhiteSpace(token), "Token provider returned a null or empty token")
+            .Match(
+                onSuccess: token => AppendTokenAndSendAsync(request, token, cancellationToken),
+                onFailure: error =>
                 {
-                    var result = await _tokenProvider.GetTokenAsync(cancellationToken).ConfigureAwait(false);
-
-                    if (result.IsFailure)
-                    {
-                        logger.LogError("Token provider failed to retrieve token. Reason: {Error}", result.Error);
-                        throw new TokenRetrievalException(result.Error);
-                    }
-
-                    return result.Value;
-                },
-                options => options
-                    .SetDuration(TimeSpan.FromHours(2))
-                    .SetFailSafe(true)
-                    .SetFactoryTimeouts(TimeSpan.FromSeconds(10))
-                    .SetEagerRefresh(0.9f), cancellationToken
+                    logger.LogWarning("An unexpected error occured: {Error}.", error);
+                    return Task.FromResult(CreateTokenFailureResponse(error));
+                }
             );
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to acquire CSRF token.");
-            return CreateTokenFailureResponse($"Failed to acquire CSRF token. Reason: {ex.Message}");
-        }
+    }
 
-        if (string.IsNullOrWhiteSpace(token))
-        {
-            logger.LogError("Token acquisition (including cache/fail-safe) resulted in a null or empty token.");
-            return CreateTokenFailureResponse("Token acquisition failed, resulting in an empty token.");
-        }
-
-        var uriBuilder = new UriBuilder(request.RequestUri);
+    private Task<HttpResponseMessage> AppendTokenAndSendAsync(HttpRequestMessage request, string token, CancellationToken cancellationToken)
+    {
+        var uriBuilder = new UriBuilder(request.RequestUri!);
         NameValueCollection parts = HttpUtility.ParseQueryString(uriBuilder.Query);
+
         parts["_token"] = token;
         uriBuilder.Query = parts.ToString();
         request.RequestUri = uriBuilder.Uri;
 
         // Proceed with the modified request
-        return await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        return base.SendAsync(request, cancellationToken);
     }
 
     private static HttpResponseMessage CreateTokenFailureResponse(string message) => new(System.Net.HttpStatusCode.InternalServerError)
@@ -71,9 +64,3 @@ internal sealed class TokenAppendingHandler(
         Content = new StringContent(message, System.Text.Encoding.UTF8, "text/plain")
     };
 }
-
-/// <summary>
-/// Custom exception to signal a failure when unwrapping the Result<T> from the token provider.
-/// </summary>
-[ExcludeFromCodeCoverage]
-internal sealed class TokenRetrievalException(string? message) : Exception(message);
