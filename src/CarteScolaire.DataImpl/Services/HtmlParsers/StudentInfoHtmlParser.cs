@@ -24,11 +24,12 @@ internal sealed class StudentInfoHtmlParser(
         {
             using IDocument document = await browsingContext.OpenAsync(r => r.Content(stream), cancellationToken);
             var elements = document.QuerySelectorAll(_selectorOptions.ResultSelector);
+            
+            var result = elements.Length is 0
+                ? Result<StudentInfoCollection>.Failure("No matching items found")
+                : elements.Select(ParseElement).ToArray();
 
-            return
-                (elements.Length == 0
-                    ? Result<StudentInfoCollection>.Failure("No matching items found")
-                    : elements.Select(ParseElement).ToArray())
+            return result
                 .OnSuccess(items => logger.LogDebug("{Count} HTML elements parsed successfully in {@Time}", items.Count, sw.Elapsed))
                 .OnFailure(error => logger.LogError("Failed to parse HTML stream. Reason: {Reason}.", error));
         }

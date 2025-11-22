@@ -1,0 +1,12 @@
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.Data\bin\Release\net9.0\CarteScolaire.Data.deps.json
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.Data\bin\Release\net9.0\CarteScolaire.Data.dll
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.Data\bin\Release\net9.0\CarteScolaire.Data.pdb
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.Data\obj\Release\net9.0\CarteScolaire.Data.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.Data\obj\Release\net9.0\CarteScolaire.Data.AssemblyInfoInputs.cache
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.Data\obj\Release\net9.0\CarteScolaire.Data.AssemblyInfo.cs
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.Data\obj\Release\net9.0\CarteScolaire.Data.csproj.CoreCompileInputs.cache
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.Data\obj\Release\net9.0\CarteScolaire.Data.sourcelink.json
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.Data\obj\Release\net9.0\CarteScolaire.Data.dll
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.Data\obj\Release\net9.0\refint\CarteScolaire.Data.dll
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.Data\obj\Release\net9.0\CarteScolaire.Data.pdb
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.Data\obj\Release\net9.0\ref\CarteScolaire.Data.dll

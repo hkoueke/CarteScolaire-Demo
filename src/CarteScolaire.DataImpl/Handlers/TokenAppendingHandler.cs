@@ -1,4 +1,6 @@
 ﻿using System.Collections.Specialized;
+using System.Net;
+using System.Text;
 using System.Web;
 using CarteScolaire.Data.Services;
 using CarteScolaire.DataImpl.Helpers;
@@ -22,24 +24,25 @@ internal sealed class TokenAppendingHandler(
             return CreateTokenFailureResponse("Invalid request: missing Request Uri.");
         }
 
+        // On récupère un Result<string>, PAS un string directement
         var result = await cache.GetOrSetAsync(
             CacheKey,
-            async _ => await tokenProvider.GetTokenAsync(cancellationToken).ConfigureAwait(false),
+            async ct => await tokenProvider.GetTokenAsync(ct),
             options => options
                 .SetDuration(TimeSpan.FromHours(2))
                 .SetFailSafe(true)
                 .SetFactoryTimeouts(TimeSpan.FromSeconds(10))
                 .SetEagerRefresh(0.9f),
-            cancellationToken
-        );
+            cancellationToken);
 
+        // On valide que le token est non vide ET on gère tous les cas d'échec
         return await result
             .Ensure(token => !string.IsNullOrWhiteSpace(token), "Token provider returned a null or empty token")
             .Match(
                 onSuccess: token => AppendTokenAndSendAsync(request, token, cancellationToken),
                 onFailure: error =>
                 {
-                    logger.LogWarning("An unexpected error occured: {Error}.", error);
+                    logger.LogWarning("Failed to obtain CSRF token: {Error}", error );
                     return Task.FromResult(CreateTokenFailureResponse(error));
                 }
             );
@@ -58,9 +61,13 @@ internal sealed class TokenAppendingHandler(
         return base.SendAsync(request, cancellationToken);
     }
 
-    private static HttpResponseMessage CreateTokenFailureResponse(string message) => new(System.Net.HttpStatusCode.InternalServerError)
+    private static HttpResponseMessage CreateTokenFailureResponse(string? message)
     {
-        ReasonPhrase = message,
-        Content = new StringContent(message, System.Text.Encoding.UTF8, "text/plain")
-    };
+        var text = message ?? "An unknown error occurred while retrieving the CSRF token.";
+        return new HttpResponseMessage(HttpStatusCode.InternalServerError)
+        {
+            ReasonPhrase = text,
+            Content = new StringContent(text, Encoding.UTF8, "text/plain")
+        };
+    }
 }

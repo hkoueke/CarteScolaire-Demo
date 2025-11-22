@@ -32,7 +32,7 @@ internal sealed class TokenProvider(
 
     private async Task<Result<string>> GetTokenThenParseAsync(CancellationToken cancellationToken)
     {
-        logger.LogInformation("Initiating fetch for CSRF token from {BaseAddress} at {Path}", 
+        logger.LogInformation("Initiating fetch for CSRF token from {BaseAddress} at {Path}",
             httpClient.BaseAddress, _options.TokenEndpointPath);
 
         var sw = Stopwatch.StartNew();
@@ -54,7 +54,7 @@ internal sealed class TokenProvider(
                 var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
 
                 using var document = await browsingContext
-                    .OpenAsync(req => req.Content(stream), cancellationToken)
+                    .OpenAsync(req => req.Content(stream, shouldDispose: true), cancellationToken)
                     .ConfigureAwait(false);
 
                 logger.LogDebug("HTML document parsed successfully in {@ParseTime}", sw.Elapsed);
@@ -62,7 +62,7 @@ internal sealed class TokenProvider(
                 return document
                     .QuerySelector(_options.TokenSelector)
                     .ToResult($"CSRF token element not found. Selector: {_options.TokenSelector}")
-                    .Bind(element => element.GetAttribute("value").ToResult("CSRF token element found but value is empty or missing"))
+                    .Bind(element => element.GetAttribute("value").ToResult("CSRF token element found but value is missing"))
                     .Ensure(token => !string.IsNullOrWhiteSpace(token), "CSRF token element found but value is empty or missing");
             },
             ex => ex switch

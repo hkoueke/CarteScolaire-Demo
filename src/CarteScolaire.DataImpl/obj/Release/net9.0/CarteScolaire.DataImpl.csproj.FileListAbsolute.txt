@@ -1,0 +1,16 @@
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.DataImpl\bin\Release\net9.0\CarteScolaire.DataImpl.deps.json
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.DataImpl\bin\Release\net9.0\CarteScolaire.DataImpl.dll
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.DataImpl\bin\Release\net9.0\CarteScolaire.DataImpl.pdb
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.DataImpl\bin\Release\net9.0\CarteScolaire.Data.dll
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.DataImpl\bin\Release\net9.0\CarteScolaire.Data.pdb
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.DataImpl\obj\Release\net9.0\CarteScolaire.DataImpl.csproj.AssemblyReference.cache
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.DataImpl\obj\Release\net9.0\CarteScolaire.DataImpl.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.DataImpl\obj\Release\net9.0\CarteScolaire.DataImpl.AssemblyInfoInputs.cache
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.DataImpl\obj\Release\net9.0\CarteScolaire.DataImpl.AssemblyInfo.cs
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.DataImpl\obj\Release\net9.0\CarteScolaire.DataImpl.csproj.CoreCompileInputs.cache
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.DataImpl\obj\Release\net9.0\CarteScolaire.DataImpl.sourcelink.json
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.DataImpl\obj\Release\net9.0\CarteSco.134BC941.Up2Date
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.DataImpl\obj\Release\net9.0\CarteScolaire.DataImpl.dll
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.DataImpl\obj\Release\net9.0\refint\CarteScolaire.DataImpl.dll
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.DataImpl\obj\Release\net9.0\CarteScolaire.DataImpl.pdb
+C:\Users\wansi\source\repos\CarteScolaire-Demo\src\CarteScolaire.DataImpl\obj\Release\net9.0\ref\CarteScolaire.DataImpl.dll

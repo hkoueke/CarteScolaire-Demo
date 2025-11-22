@@ -9,6 +9,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CarteScolaire.Data", "src\C
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CarteScolaire.DataImpl", "src\CarteScolaire.DataImpl\CarteScolaire.DataImpl.csproj", "{B2084966-6162-41F6-B713-5D035E8861BA}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CarteScolaire.CI-CD", "src\CarteScolaire.CI-CD\CarteScolaire.CI-CD.csproj", "{B5E4F839-B7CB-4602-A87F-FFD3B1F80BF7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CarteScolaire.Tests.Unit", "src\CarteScolaire.Tests.Unit\CarteScolaire.Tests.Unit.csproj", "{0E4504AE-6BE0-43DB-9240-FAE77364FCAF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +31,12 @@ Global
 		{B2084966-6162-41F6-B713-5D035E8861BA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B2084966-6162-41F6-B713-5D035E8861BA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B2084966-6162-41F6-B713-5D035E8861BA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B5E4F839-B7CB-4602-A87F-FFD3B1F80BF7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B5E4F839-B7CB-4602-A87F-FFD3B1F80BF7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0E4504AE-6BE0-43DB-9240-FAE77364FCAF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0E4504AE-6BE0-43DB-9240-FAE77364FCAF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0E4504AE-6BE0-43DB-9240-FAE77364FCAF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0E4504AE-6BE0-43DB-9240-FAE77364FCAF}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

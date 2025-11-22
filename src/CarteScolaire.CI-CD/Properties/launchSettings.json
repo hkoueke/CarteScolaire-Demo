@@ -1,0 +1,7 @@
+{
+  "profiles": {
+    "CarteScolaire.CI-CD": {
+      "commandName": "Project"
+    }
+  }
+}

@@ -39,7 +39,7 @@ internal sealed class StudentInfoService(HttpClient httpClient, IHtmlParser<Stud
                     );
                 }
 
-                var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+                await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
                 return await htmlParser.ParseAsync(stream, cancellationToken).ConfigureAwait(false);
             }
         );
