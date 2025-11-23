@@ -7,7 +7,9 @@ using CarteScolaire.DataImpl.Helpers;
 
 namespace CarteScolaire.DataImpl.Services;
 
-internal sealed class StudentInfoService(HttpClient httpClient, IHtmlParser<StudentInfoResponse> htmlParser) : IStudentInfoService
+internal sealed class StudentInfoService(
+    HttpClient httpClient,
+    IHtmlParser<StudentInfoResponse> htmlParser) : IStudentInfoService
 {
     public async Task<Result<StudentInfoCollection>> GetStudentInfoAsync(StudentInfoQuery query, CancellationToken cancellationToken = default)
     {

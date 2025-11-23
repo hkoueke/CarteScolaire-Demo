@@ -106,7 +106,7 @@ class Build : NukeBuild
 
             if (appProject is null)
             {
-                throw new Exception($"Project '{AppProjectName}' not found in solution.");
+                throw new InvalidOperationException($"Project '{AppProjectName}' not found in solution.");
             }
 
             //ControlFlow.NotNull(appProject, $"Project '{AppProjectName}' not found in solution.");

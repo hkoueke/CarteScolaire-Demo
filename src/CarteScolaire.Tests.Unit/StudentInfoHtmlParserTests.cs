@@ -36,27 +36,27 @@ public class StudentInfoHtmlParserTests : IDisposable
     private static MemoryStream HtmlStream(string html) => new(Encoding.UTF8.GetBytes(html));
 
     [Fact]
-    public async Task ParseAsync_ShouldReturnSuccess_WhenAllDataIsPresent_AndMultipleRows()
+    public async Task ParseAsync_ShouldReturnMultipleRows_WhenAllDataIsPresent()
     {
         // Arrange
         const string html =
             """
-                <div class="student-row">
-                    <span class="reg-id">2024001</span>
-                    <span class="name">Jean Dupont</span>
-                    <span class="school">Collège Victor Hugo</span>
-                    <span class="class">6ème A</span>
-                    <span class="dob">2012-03-15</span>
-                    <span class="gender">M</span>
-                </div>
-                <div class="student-row">
-                    <span class="reg-id">2024002</span>
-                    <span class="name">Marie Curie</span>
-                    <span class="school">Lycée Marie Curie</span>
-                    <span class="class">Terminale S</span>
-                    <span class="dob">03/22/2011</span>
-                    <span class="gender">f</span>
-                </div>
+            <div class="student-row">
+                <span class="reg-id">2024001</span>
+                <span class="name">Jean Dupont</span>
+                <span class="school">Collège Victor Hugo</span>
+                <span class="class">6ème A</span>
+                <span class="dob">2012-03-15</span>
+                <span class="gender">M</span>
+            </div>
+            <div class="student-row">
+                <span class="reg-id">2024002</span>
+                <span class="name">Marie Curie</span>
+                <span class="school">Lycée Marie Curie</span>
+                <span class="class">Terminale S</span>
+                <span class="dob">03/22/2011</span>
+                <span class="gender">f</span>
+            </div>
             """;
 
         var parser = CreateParser();
@@ -87,13 +87,13 @@ public class StudentInfoHtmlParserTests : IDisposable
     [Fact]
     public async Task ParseAsync_ShouldUseFallbackValues_WhenSomeFieldsAreMissing()
     {
-        const string html = 
+        const string html =
             """
-                <div class="student-row">
-                    <span class="reg-id">999</span>
-                    <span class="name">Alice</span>
-                    <!-- school, class, dob, gender missing -->
-                </div>
+            <div class="student-row">
+                <span class="reg-id">999</span>
+                <span class="name">Alice</span>
+                <!-- school, class, dob, gender missing -->
+            </div>
             """;
 
         var parser = CreateParser();
@@ -116,7 +116,7 @@ public class StudentInfoHtmlParserTests : IDisposable
         const string html = "<div>No students here</div>";
         var parser = CreateParser();
 
-        var result = await parser.ParseAsync(HtmlStream(html), CancellationToken.None);
+        var result = await parser.ParseAsync(HtmlStream(html), TestContext.Current.CancellationToken);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be("No matching items found");
@@ -126,7 +126,7 @@ public class StudentInfoHtmlParserTests : IDisposable
     public async Task ParseAsync_ShouldReturnFailure_WhenHtmlIsInvalid_AndLogException()
     {
         // Malformed HTML stream (truncated)
-        var invalidBytes = "<html><body><div class=\"student-row\">"u8.ToArray()[..^5];
+        var invalidBytes = """<html><body><div class="student-row">"""u8.ToArray()[..^5];
         var stream = new MemoryStream(invalidBytes);
         var parser = CreateParser();
 
@@ -146,12 +146,12 @@ public class StudentInfoHtmlParserTests : IDisposable
     [Fact]
     public async Task ParseAsync_ShouldParseGender_CaseInsensitively_AndHandleUnexpectedValues()
     {
-        const string html = 
+        const string html =
             """
-                <div class="student-row"><span class="gender">M</span></div>
-                <div class="student-row"><span class="gender">f</span></div>
-                <div class="student-row"><span class="gender">male</span></div>
-                <div class="student-row"><span class="gender"></span></div>
+            <div class="student-row"><span class="gender">M</span></div>
+            <div class="student-row"><span class="gender">f</span></div>
+            <div class="student-row"><span class="gender">male</span></div>
+            <div class="student-row"><span class="gender"></span></div>
             """;
 
         var parser = CreateParser();
@@ -172,10 +172,10 @@ public class StudentInfoHtmlParserTests : IDisposable
     [Fact]
     public async Task ParseAsync_ShouldSupportMultipleDateFormats_IncludingCurrentCulture()
     {
-        const string html = 
+        const string html =
             """
-                <div class="student-row"><span class="dob">2023-12-01</span></div>
-                <div class="student-row"><span class="dob">12/25/2022</span></div>
+            <div class="student-row"><span class="dob">2023-12-01</span></div>
+            <div class="student-row"><span class="dob">12/25/2022</span></div>
             """;
 
         var parser = CreateParser();

@@ -1,11 +1,11 @@
-﻿using AngleSharp;
+﻿using System.Net;
+using System.Text;
+using AngleSharp;
 using CarteScolaire.DataImpl.Services.TokenProviders;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
-using System.Net;
-using System.Text;
 
 namespace CarteScolaire.Tests.Unit;
 
@@ -27,7 +27,7 @@ public class TokenProviderTests : IDisposable
     }
 
 
-    private TokenProvider CreateSut(HttpClient httpClient) 
+    private TokenProvider CreateSut(HttpClient httpClient)
         => new(httpClient, _browsingContext, Options.Create(_options), _logger);
 
 
@@ -39,43 +39,46 @@ public class TokenProviderTests : IDisposable
                 Content = new StringContent(html, Encoding.UTF8, "text/html")
             }));
 
-        var client = new HttpClient(handler)
+        return new HttpClient(handler)
         {
             BaseAddress = new Uri("https://test.example.com")
         };
-
-        return client;
     }
 
     private static HttpClient HttpClientWithException(Exception exception)
     {
         var handler = new TestHttpMessageHandler((_, _) => Task.FromException<HttpResponseMessage>(exception));
 
-        var client = new HttpClient(handler)
+        return new HttpClient(handler)
         {
             BaseAddress = new Uri("https://test.example.com")
         };
-
-        return client;
     }
 
     [Fact]
-    public async Task GetTokenAsync_ShouldReturnFailure_WhenBaseAddressIsNull()
+    public async Task GetTokenAsync_ShouldThrow_WhenBaseAddressIsNull()
     {
         var httpClient = new HttpClient { BaseAddress = null! };
         var provider = CreateSut(httpClient);
 
-        var result = await provider.GetTokenAsync(TestContext.Current.CancellationToken);
+        await provider
+            .Invoking(p => p.GetTokenAsync(TestContext.Current.CancellationToken))
+            .Should().ThrowAsync<UriFormatException>()
+            .WithMessage("*BaseAddress is not set on the HttpClient*");
 
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("BaseAddress is not set on the HttpClient");
+        _logger.Received(1).Log(
+            LogLevel.Warning,
+            Arg.Any<EventId>(),
+            Arg.Is<object>(o => o.ToString()!.Contains("BaseAddress is not set on the HttpClient")),
+            null,
+            Arg.Any<Func<object, Exception?, string>>());
     }
 
     [Fact]
     public async Task GetTokenAsync_ShouldReturnSuccess_WhenTokenIsExtracted()
     {
         const string token = "abc123xyz";
-        const string html = 
+        const string html =
             $"""
                 <!DOCTYPE html>
                 <html><body>
@@ -88,57 +91,55 @@ public class TokenProviderTests : IDisposable
 
         var result = await provider.GetTokenAsync(TestContext.Current.CancellationToken);
 
-        result.IsSuccess.Should().BeTrue();
-        result.Value.Should().Be(token);
+        result.Should().Be(token);
     }
 
     [Fact]
-    public async Task GetTokenAsync_ShouldReturnFailure_WhenHttpResponseIsNotSuccess()
+    public async Task GetTokenAsync_ShouldThrow_WhenHttpResponseIsNotSuccess()
     {
         using var httpClient = HttpClientFromHtml("", HttpStatusCode.BadRequest);
         var provider = CreateSut(httpClient);
 
-        var result = await provider.GetTokenAsync(TestContext.Current.CancellationToken);
-
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Bad Request");
+        await provider
+            .Invoking(p => p.GetTokenAsync(TestContext.Current.CancellationToken))
+            .Should().ThrowAsync<HttpRequestException>()
+            .WithMessage("*400 (Bad Request)*");
     }
 
     [Fact]
-    public async Task GetTokenAsync_ShouldReturnFailure_WhenTokenElementNotFound()
+    public async Task GetTokenAsync_ShouldThrow_WhenTokenElementNotFound()
     {
         const string html = "<!DOCTYPE html><html><body>No token here</body></html>";
-
         using var httpClient = HttpClientFromHtml(html);
         var provider = CreateSut(httpClient);
 
-        var result = await provider.GetTokenAsync(TestContext.Current.CancellationToken);
-
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("CSRF token element not found. Selector: #csrf");
+        await provider
+            .Invoking(p => p.GetTokenAsync(TestContext.Current.CancellationToken))
+            .Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("CSRF token element not found. Selector: #csrf");
     }
 
     [Fact]
-    public async Task GetTokenAsync_ShouldReturnFailure_WhenHttpRequestExceptionOccurs()
+    public async Task GetTokenAsync_ShouldThrow_WhenHttpRequestExceptionOccurs()
     {
         using var httpClient = HttpClientWithException(new HttpRequestException("Network failure"));
         var provider = CreateSut(httpClient);
 
-        var result = await provider.GetTokenAsync(TestContext.Current.CancellationToken);
-
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Network error while fetching page for CSRF token");
+        await provider
+            .Invoking(p => p.GetTokenAsync(TestContext.Current.CancellationToken))
+            .Should().ThrowAsync<HttpRequestException>()
+            .WithMessage("*Network failure*");
     }
 
     [Fact]
-    public async Task GetTokenAsync_ShouldReturnFailure_WhenOperationCanceledExceptionOccurs()
+    public async Task GetTokenAsync_ShouldThrow_WhenOperationCanceledExceptionOccurs()
     {
-        using var httpClient = HttpClientWithException(new OperationCanceledException("Cancelled"));
+        using var httpClient = HttpClientWithException(new OperationCanceledException("Operation canceled"));
         var provider = CreateSut(httpClient);
 
-        var result = await provider.GetTokenAsync(TestContext.Current.CancellationToken);
-
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Token fetch from https://test.example.com/ was canceled");
+        await provider
+            .Invoking(p => p.GetTokenAsync(TestContext.Current.CancellationToken))
+            .Should().ThrowAsync<OperationCanceledException>()
+            .WithMessage("*Operation canceled*");
     }
 }

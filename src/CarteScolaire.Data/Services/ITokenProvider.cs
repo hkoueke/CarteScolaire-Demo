@@ -1,6 +1,4 @@
-﻿using CarteScolaire.Data.Responses;
-
-namespace CarteScolaire.Data.Services;
+﻿namespace CarteScolaire.Data.Services;
 
 /// <summary>
 /// A simple token provider interface.
@@ -16,9 +14,7 @@ public interface ITokenProvider<T> where T : class
     /// </summary>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>
-    /// A task representing the asynchronous operation. The task result contains a <see cref="Result{T}"/>
-    /// which is either a success with the required token, or a failure with an error message 
-    /// detailing why the token could not be retrieved.
+    /// A task representing the asynchronous operation. The task result contains a <typeparamref name="T"/> token
     /// </returns>
-    public Task<Result<T>> GetTokenAsync(CancellationToken cancellationToken = default);
+    public Task<T> GetTokenAsync(CancellationToken cancellationToken = default);
 }
