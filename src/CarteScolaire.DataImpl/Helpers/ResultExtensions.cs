@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Data.Responses;
 
+#pragma warning disable CA1031
 /// <summary>
 /// Extension methods for working with Result types.
 /// </summary>
@@ -24,35 +25,39 @@ public static class ResultExtensions
         => value ?? Result<T>.Failure(errorMessage);
 
 
+    // Shared error-mapping logic extracted once
+    private static Result<T> Catch<T>(Exception ex, Func<Exception, string>? errorMapper) =>
+        Result<T>.Failure(errorMapper?.Invoke(ex) ?? ex.Message);
+
     /// <summary>
     /// Executes an operation and wraps it in a Result, catching exceptions.
     /// </summary>
     public static Result<T> Try<T>(Func<T> operation, Func<Exception, string>? errorMapper = null)
     {
+        ArgumentNullException.ThrowIfNull(operation);
         try
         {
             return operation();
         }
         catch (Exception ex)
         {
-            var errorMessage = errorMapper?.Invoke(ex) ?? ex.Message;
-            return Result<T>.Failure(errorMessage);
+            return Catch<T>(ex, errorMapper);
         }
     }
 
     /// <summary>
     /// Executes an asynchronous operation and wraps it in a Result, catching exceptions.
     /// </summary>
-    public static async Task<Result<T>> TryAsync<T>(Func<Task<Result<T>>> operation, Func<Exception, string>? errorMapper = null)
+    public static async Task<Result<T>> TryAsync<T>(Func<Task<T>> operation, Func<Exception, string>? errorMapper = null)
     {
+        ArgumentNullException.ThrowIfNull(operation);
         try
         {
-            return await operation();
+            return await operation().ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            var errorMessage = errorMapper?.Invoke(ex) ?? ex.Message;
-            return Result<T>.Failure(errorMessage);
+            return Catch<T>(ex, errorMapper);
         }
     }
 
@@ -63,13 +68,13 @@ public static class ResultExtensions
     public static Result<IEnumerable<T>> Combine<T>(this IEnumerable<Result<T>> results)
     {
         // We must materialize the list to check for failures and then select values.
-        var resultsList = results.ToList();
+        List<Result<T>> resultsList = results.ToList();
 
         // Using FirstOrDefault with a struct is dangerous, as default(Result<T>)
         // would report IsFailure = true, leading to a bug.
         // A simple loop is the safest and most correct way to find the first failure.
         // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
-        foreach (var result in resultsList)
+        foreach (Result<T> result in resultsList)
         {
             if (result.IsFailure)
             {
@@ -79,7 +84,7 @@ public static class ResultExtensions
         }
 
         // If we get here, all results were successful.
-        return Result<IEnumerable<T>>.Success(resultsList.Select(r => r.Value));
+        return Result.Success(resultsList.Select(r => r.Value));
     }
 
     /// <summary>
@@ -87,8 +92,12 @@ public static class ResultExtensions
     /// </summary>
     public static Result<T> Ensure<T>(this Result<T> result, Func<T, bool> predicate, string errorMessage)
     {
+        ArgumentNullException.ThrowIfNull(predicate);
+
         if (result.IsFailure)
+        {
             return result;
+        }
 
         return predicate(result.Value)
             ? result

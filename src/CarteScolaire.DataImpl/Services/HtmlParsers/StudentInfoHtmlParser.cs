@@ -9,30 +9,38 @@ using Microsoft.Extensions.Options;
 
 namespace CarteScolaire.DataImpl.Services.HtmlParsers;
 
+#pragma warning disable CA1031
+
 internal sealed class StudentInfoHtmlParser(
     IBrowsingContext browsingContext,
     IOptions<SelectorOptions> options,
     ILogger<StudentInfoHtmlParser> logger) : IHtmlParser<StudentInfoResponse>
 {
     private readonly SelectorOptions _selectorOptions = options.Value;
+    private static readonly string[] DateFormats = ["yyyy-MM-dd", "MM/dd/yyyy", "dd-MM-yyyy"];
 
     public async Task<Result<StudentInfoCollection>> ParseAsync(Stream stream, CancellationToken cancellationToken)
     {
-        var sw = Stopwatch.StartNew();
+        ArgumentNullException.ThrowIfNull(stream);
+        Stopwatch sw = Stopwatch.StartNew();
 
         try
         {
-            using IDocument document = await browsingContext.OpenAsync(r => r.Content(stream), cancellationToken);
-            var elements = document.QuerySelectorAll(_selectorOptions.ResultSelector);
-            
-            var result = elements.Length is 0
+            using IDocument document = await browsingContext
+                .OpenAsync(r => r.Content(stream), cancellationToken)
+                .ConfigureAwait(false);
+
+            IHtmlCollection<IElement> elements = document.QuerySelectorAll(_selectorOptions.ResultSelector);
+
+            Result<StudentInfoCollection> result = elements.Length is 0
                 ? Result<StudentInfoCollection>.Failure("No matching items found")
                 : elements.Select(ParseElement).ToArray();
 
             return result
-                .OnSuccess(items => logger.LogDebug("{Count} HTML elements parsed successfully in {@Time}", items.Count, sw.Elapsed))
+                .OnSuccess(items => logger.LogDebug("{Count} HTML element(s) parsed successfully in {@Time}", items.Count, sw.Elapsed))
                 .OnFailure(error => logger.LogError("Failed to parse HTML stream. Reason: {Reason}.", error));
         }
+
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to parse HTML stream.");
@@ -44,30 +52,32 @@ internal sealed class StudentInfoHtmlParser(
         }
     }
 
-    /// <summary>
-    /// Helper to safely get and trim text content from a node.
-    /// </summary>
-    private static string? GetCleanText(IElement node, string selector) => node.QuerySelector(selector)?.TextContent.Trim();
+    /// <summary>Safely queries a selector and returns trimmed text, or null if absent/empty.</summary>
+    private static string? GetCleanText(IElement node, string selector)
+    {
+        string? text = node.QuerySelector(selector)?.TextContent.Trim();
+        return string.IsNullOrEmpty(text) ? null : text;
+    }
 
     private StudentInfoResponse ParseElement(IElement node)
     {
-        var registrationId = GetCleanText(node, _selectorOptions.RegistrationIdSelector) ?? "N/A";
-        var studentName = GetCleanText(node, _selectorOptions.NameSelector) ?? "N/A";
-        var schoolName = GetCleanText(node, _selectorOptions.SchoolNameSelector) ?? "N/A";
-        var studentClass = GetCleanText(node, _selectorOptions.GradeSelector) ?? "N/A";
-        var dateOfBirthText = GetCleanText(node, _selectorOptions.DateOfBirthSelector);
-        var genderText = GetCleanText(node, _selectorOptions.GenderSelector);
-        var gender = genderText?.ToUpperInvariant() switch
-        {
-            "M" => Gender.Male,
-            "F" => Gender.Female,
-            _ => Gender.Unspecified
-        };
+        string registrationId = GetCleanText(node, _selectorOptions.RegistrationIdSelector) ?? "N/A";
+        string studentName = GetCleanText(node, _selectorOptions.NameSelector) ?? "N/A";
+        string schoolName = GetCleanText(node, _selectorOptions.SchoolNameSelector) ?? "N/A";
+        string studentClass = GetCleanText(node, _selectorOptions.GradeSelector) ?? "N/A";
+        string? dateOfBirthText = GetCleanText(node, _selectorOptions.DateOfBirthSelector);
+        string? genderText = GetCleanText(node, _selectorOptions.GenderSelector);
 
-        string[] dateFormats = ["yyyy-MM-dd", "MM/dd/yyyy"];
+        Gender gender = GenderExtensions.ToGender(genderText);
 
+        // Use InvariantCulture for culture-neutral format strings.
         DateOnly? dob = dateOfBirthText is not null
-            && DateOnly.TryParseExact(dateOfBirthText, dateFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed)
+            && DateOnly.TryParseExact(
+                   dateOfBirthText,
+                   DateFormats,
+                   CultureInfo.InvariantCulture,
+                   DateTimeStyles.None,
+                   out DateOnly parsed)
             ? parsed
             : null;
 

@@ -1,0 +1,2934 @@
+// Build.cs
+using System;
+using Nuke.Common;
+using Nuke.Common.CI.GitHubActions;
+using Nuke.Common.IO;
+using Nuke.Common.ProjectModel;
+using Nuke.Common.Tools.DotNet;
+using Nuke.Common.Utilities.Collections;
+using static Nuke.Common.Tools.DotNet.DotNetTasks;
+
+
+
+[DotNetVerbosityMapping]
+[GitHubActions(
+    "continuous-integration",
+    GitHubActionsImage.UbuntuLatest,
+    OnPushBranches = ["main", "feature/*"],
+    InvokedTargets = [nameof(Test), nameof(PublishApp)],
+    FetchDepth = 0)]
+class Build : NukeBuild
+{
+    public static int Main() => Execute<Build>(x => x.Default);
+
+    #region Configuration Properties
+
+    // Automatically injects the solution model from the .sln file.
+    [Solution] readonly Solution Solution;
+
+    // Defines the configuration used for the build (e.g., Debug, Release).
+    [Parameter("Configuration to build - Default is 'Debug' (local) or 'Release' (server)")]
+    readonly Configuration Configuration = IsLocalBuild ? Configuration.Debug : Configuration.Release;
+
+    // Directory to output artifacts like packages or published files.
+    AbsolutePath ArtifactsDirectory => RootDirectory / "artifacts";
+
+    // REQUIRED: Set the Runtime Identifier for the EXE (e.g., win-x64, linux-arm64)
+    // This is mandatory for creating a self-contained executable.
+    [Parameter("Runtime Identifier for self-contained deployment (e.g., win-x64, linux-x64)")]
+    readonly string RuntimeIdentifier = "win-x64"; // Defaulting to Windows 64-bit EXE
+
+    // REQUIRED: Specify the main application project to publish
+    [Parameter("The name of the console or desktop application project.")]
+    readonly string AppProjectName = "CarteScolaire"; // Placeholder: Update this to your project name!
+
+    #endregion
+
+    #region Targets (The Build Steps)
+
+    // 1. Cleanup Phase
+    // Deletes temporary files and output directories to ensure a fresh build.
+    Target Clean => _ => _
+        .Before(Restore)
+        .Executes(() =>
+        {
+            // Clean solution output directories (bin, obj)
+            DotNetClean(s => s
+                .SetConfiguration(Configuration)
+                .SetProject(Solution));
+
+            // Clean artifacts directory
+            ArtifactsDirectory.CreateOrCleanDirectory();
+        });
+
+    // 2. Dependency Restoration
+    // Restores NuGet packages for all projects in the solution.
+    Target Restore => _ => _
+        .Executes(() => DotNetRestore(s => s.SetProjectFile(Solution)));
+
+    // 3. Compilation / Build Phase (The core CI step)
+    // Compiles the entire solution.
+    Target Compile => _ => _
+        .DependsOn(Restore)
+        .Executes(() =>
+        {
+            DotNetBuild(s => s
+                .SetProjectFile(Solution)
+                .SetConfiguration(Configuration)
+                .EnableNoRestore()); // Don't re-restore packages
+        });
+
+    // 4. Testing Phase (Critical for CI)
+    // Runs all unit and integration tests. The build will fail if any test fails.
+    Target Test => _ => _
+        .DependsOn(Compile)
+        .Executes(() =>
+        {
+            // Find all projects ending with '.Tests' and run them
+            Solution.GetAllProjects("*Tests*").ForEach(project =>
+            {
+                DotNetTest(s => s
+                    .SetProjectFile(project)
+                    .SetConfiguration(Configuration)
+                    .SetLoggers("trx")// Output test results in a standard format
+                    .EnableNoBuild() // No need to re-compile tests
+                    .EnableNoRestore());
+            });
+        });
+
+    // 5. Application Publication Phase (The CD step for EXE)
+    // Publishes a self-contained application, resulting in an executable (.exe).
+    Target PublishApp => _ => _
+        .DependsOn(Test)
+        .Produces(ArtifactsDirectory / "publish-app")
+        .Executes(() =>
+        {
+            var appProject = Solution.GetProject(AppProjectName);
+
+            if (appProject is null)
+            {
+                throw new InvalidOperationException($"Project '{AppProjectName}' not found in solution.");
+            }
+
+            //ControlFlow.NotNull(appProject, $"Project '{AppProjectName}' not found in solution.");
+
+            DotNetPublish(s => s
+                .SetProject(appProject)
+                .SetConfiguration(Configuration)
+                .SetOutput(ArtifactsDirectory / "publish-app")
+                .SetRuntime(RuntimeIdentifier) // THIS IS KEY to generating the native executable
+                .SetSelfContained(true)        // Generates an independent, runnable folder structure
+                .EnablePublishSingleFile()     // Optional: Packages output into a single EXE file (requires .NET Core 3.0+)
+                .EnableNoRestore());
+        });
+
+    // 6. Default Target
+    // The target executed if no specific target is specified (useful for quick local runs).
+    Target Default => _ => _.DependsOn(Test); // Running tests is usually a good default for local development
+
+    #endregion
+    //PublishApp --configuration Release --RuntimeIdentifier win-x64 -- for debug purposes
+}
+
+// -----------------------------
+// Configuration.cs
+using System.ComponentModel;
+using Nuke.Common.Tooling;
+
+[TypeConverter(typeof(TypeConverter<Configuration>))]
+public class Configuration : Enumeration
+{
+    public static Configuration Debug = new() { Value = nameof(Debug) };
+    public static Configuration Release = new() { Value = nameof(Release) };
+
+    public static implicit operator string(Configuration configuration) => configuration.Value;
+}
+
+// -----------------------------
+// .NETCoreApp,Version=v8.0.AssemblyAttributes.cs
+// <autogenerated />
+using System;
+using System.Reflection;
+[assembly: global::System.Runtime.Versioning.TargetFrameworkAttribute(".NETCoreApp,Version=v8.0", FrameworkDisplayName = ".NET 8.0")]
+
+// -----------------------------
+// .NETCoreApp,Version=v9.0.AssemblyAttributes.cs
+// <autogenerated />
+using System;
+using System.Reflection;
+[assembly: global::System.Runtime.Versioning.TargetFrameworkAttribute(".NETCoreApp,Version=v9.0", FrameworkDisplayName = ".NET 9.0")]
+
+// -----------------------------
+// CarteScolaire.CI-CD.AssemblyInfo.cs
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     Ce code a été généré par un outil.
+//     Version du runtime :4.0.30319.42000
+//
+//     Les modifications apportées à ce fichier peuvent provoquer un comportement incorrect et seront perdues si
+//     le code est régénéré.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: System.Reflection.AssemblyCompanyAttribute("CarteScolaire.CI-CD")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0c2138fe04f8a4b009e76761a08cea3ac4c47eb4")]
+[assembly: System.Reflection.AssemblyProductAttribute("CarteScolaire.CI-CD")]
+[assembly: System.Reflection.AssemblyTitleAttribute("CarteScolaire.CI-CD")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+
+// Généré par la classe MSBuild WriteCodeFragment.
+
+
+// -----------------------------
+// .NETCoreApp,Version=v8.0.AssemblyAttributes.cs
+// <autogenerated />
+using System;
+using System.Reflection;
+[assembly: global::System.Runtime.Versioning.TargetFrameworkAttribute(".NETCoreApp,Version=v8.0", FrameworkDisplayName = ".NET 8.0")]
+
+// -----------------------------
+// CarteScolaire.CI-CD.AssemblyInfo.cs
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     Ce code a été généré par un outil.
+//     Version du runtime :4.0.30319.42000
+//
+//     Les modifications apportées à ce fichier peuvent provoquer un comportement incorrect et seront perdues si
+//     le code est régénéré.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: System.Reflection.AssemblyCompanyAttribute("CarteScolaire.CI-CD")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+edbc15dcc51b75e836d3808a4f7a7d020573277e")]
+[assembly: System.Reflection.AssemblyProductAttribute("CarteScolaire.CI-CD")]
+[assembly: System.Reflection.AssemblyTitleAttribute("CarteScolaire.CI-CD")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+
+// Généré par la classe MSBuild WriteCodeFragment.
+
+
+// -----------------------------
+// .NETCoreApp,Version=v9.0.AssemblyAttributes.cs
+// <autogenerated />
+using System;
+using System.Reflection;
+[assembly: global::System.Runtime.Versioning.TargetFrameworkAttribute(".NETCoreApp,Version=v9.0", FrameworkDisplayName = ".NET 9.0")]
+
+// -----------------------------
+// CarteScolaire.CI-CD.AssemblyInfo.cs
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     Ce code a été généré par un outil.
+//     Version du runtime :4.0.30319.42000
+//
+//     Les modifications apportées à ce fichier peuvent provoquer un comportement incorrect et seront perdues si
+//     le code est régénéré.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: System.Reflection.AssemblyCompanyAttribute("CarteScolaire.CI-CD")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0c2138fe04f8a4b009e76761a08cea3ac4c47eb4")]
+[assembly: System.Reflection.AssemblyProductAttribute("CarteScolaire.CI-CD")]
+[assembly: System.Reflection.AssemblyTitleAttribute("CarteScolaire.CI-CD")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+
+// Généré par la classe MSBuild WriteCodeFragment.
+
+
+// -----------------------------
+// .NETCoreApp,Version=v9.0.AssemblyAttributes.cs
+// <autogenerated />
+using System;
+using System.Reflection;
+[assembly: global::System.Runtime.Versioning.TargetFrameworkAttribute(".NETCoreApp,Version=v9.0", FrameworkDisplayName = ".NET 9.0")]
+
+// -----------------------------
+// CarteScolaire.CI-CD.AssemblyInfo.cs
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     Ce code a été généré par un outil.
+//     Version du runtime :4.0.30319.42000
+//
+//     Les modifications apportées à ce fichier peuvent provoquer un comportement incorrect et seront perdues si
+//     le code est régénéré.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: System.Reflection.AssemblyCompanyAttribute("CarteScolaire.CI-CD")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0c2138fe04f8a4b009e76761a08cea3ac4c47eb4")]
+[assembly: System.Reflection.AssemblyProductAttribute("CarteScolaire.CI-CD")]
+[assembly: System.Reflection.AssemblyTitleAttribute("CarteScolaire.CI-CD")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+
+// Généré par la classe MSBuild WriteCodeFragment.
+
+
+// -----------------------------
+// GlobalUsings.cs
+global using StudentInfoCollection = System.Collections.Generic.IReadOnlyCollection<CarteScolaire.Data.Responses.StudentInfoResponse>;
+
+// -----------------------------
+// .NETCoreApp,Version=v9.0.AssemblyAttributes.cs
+// <autogenerated />
+using System;
+using System.Reflection;
+[assembly: global::System.Runtime.Versioning.TargetFrameworkAttribute(".NETCoreApp,Version=v9.0", FrameworkDisplayName = ".NET 9.0")]
+
+// -----------------------------
+// CarteScolaire.Data.GlobalUsings.g.cs
+// <auto-generated/>
+global using global::System;
+global using global::System.Collections.Generic;
+global using global::System.IO;
+global using global::System.Linq;
+global using global::System.Net.Http;
+global using global::System.Threading;
+global using global::System.Threading.Tasks;
+
+// -----------------------------
+// .NETCoreApp,Version=v9.0.AssemblyAttributes.cs
+// <autogenerated />
+using System;
+using System.Reflection;
+[assembly: global::System.Runtime.Versioning.TargetFrameworkAttribute(".NETCoreApp,Version=v9.0", FrameworkDisplayName = ".NET 9.0")]
+
+// -----------------------------
+// CarteScolaire.Data.AssemblyInfo.cs
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     Ce code a été généré par un outil.
+//     Version du runtime :4.0.30319.42000
+//
+//     Les modifications apportées à ce fichier peuvent provoquer un comportement incorrect et seront perdues si
+//     le code est régénéré.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: System.Reflection.AssemblyCompanyAttribute("CarteScolaire.Data")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0c2138fe04f8a4b009e76761a08cea3ac4c47eb4")]
+[assembly: System.Reflection.AssemblyProductAttribute("CarteScolaire.Data")]
+[assembly: System.Reflection.AssemblyTitleAttribute("CarteScolaire.Data")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+
+// Généré par la classe MSBuild WriteCodeFragment.
+
+
+// -----------------------------
+// CarteScolaire.Data.GlobalUsings.g.cs
+// <auto-generated/>
+global using global::System;
+global using global::System.Collections.Generic;
+global using global::System.IO;
+global using global::System.Linq;
+global using global::System.Net.Http;
+global using global::System.Threading;
+global using global::System.Threading.Tasks;
+
+// -----------------------------
+// DatePrecision.cs
+namespace CarteScolaire.Data.Queries;
+
+/// <summary>
+/// Controls how strictly the <see cref="SearchQuery.DateOfBirth"/> filter is applied.
+///
+/// The stored date format is always yyyyMMdd, so precision maps directly
+/// to a prefix length used in a Lucene <c>PrefixQuery</c>:
+///
+///   Year  → prefix "yyyy"     (4 chars) — matches any day in that year
+///   Month → prefix "yyyyMM"   (6 chars) — matches any day in that month
+///   Day   → exact  "yyyyMMdd" (8 chars) — matches only that exact date
+///
+/// Use <see cref="Year"/> or <see cref="Month"/> when scraped data contains
+/// partial dates, or when the query source only has year/month granularity.
+/// </summary>
+public enum DatePrecision
+{
+    /// <summary>Match documents whose DOB falls in the same year.</summary>
+    Year,
+
+    /// <summary>Match documents whose DOB falls in the same year and month.</summary>
+    Month,
+
+    /// <summary>Match documents whose DOB is exactly this date (default).</summary>
+    Day
+}
+
+// -----------------------------
+// SearchFieldAttribute.cs
+namespace CarteScolaire.Data.Queries;
+
+public enum SearchFieldType
+{
+    /// <summary>Tokenized, analyzed text (e.g. full names). Supports fuzzy & partial matching.</summary>
+    Text,
+
+    /// <summary>Exact keyword match (e.g. gender, status codes). Not analyzed.</summary>
+    Keyword,
+
+    /// <summary>ISO-8601 date stored as yyyyMMdd for range queries.</summary>
+    Date
+}
+
+/// <summary>
+/// Marks a property on a POCO as a Lucene-indexed field.
+/// </summary>
+[AttributeUsage(AttributeTargets.Property)]
+public sealed class SearchFieldAttribute : Attribute
+{
+    /// <summary>The Lucene field name. Defaults to the property name (lower-cased).</summary>
+    public string? FieldName { get; set; }
+
+    /// <summary>How the field value is analyzed and queried.</summary>
+    public SearchFieldType FieldType { get; set; } = SearchFieldType.Text;
+
+    /// <summary>
+    /// Relevance multiplier applied during query building (1.0 = default).
+    /// Boost names higher than secondary fields.
+    /// </summary>
+    public float Boost { get; set; } = 1.0f;
+
+    /// <summary>
+    /// When true the raw (un-analyzed) value is also stored so the original
+    /// object can be reconstructed from the index without the source collection.
+    /// </summary>
+    public bool Store { get; set; } = true;
+}
+
+// -----------------------------
+// SearchQuery.cs
+using CarteScolaire.Data.Responses;
+
+namespace CarteScolaire.Data.Queries;
+
+/// <summary>
+/// Represents a structured search query. All fields are optional;
+/// only populated fields contribute to scoring/filtering.
+/// </summary>
+public sealed class SearchQuery
+{
+    /// <summary>
+    /// School ID. Satisfies the external service contract. Not used for fuzzy matching.
+    /// </summary>
+    public string SchoolId { get; init; } = string.Empty;
+
+    /// <summary>Full or partial name. Supports fuzzy matching and phonetic variants.</summary>
+    public string? Name { get; init; }
+
+    /// <summary>Date of birth. Treated as an exact-match filter when provided.</summary>
+    public DateOnly? DateOfBirth { get; init; }
+
+    /// <summary>
+    /// How precisely to apply the DOB filter. Default is <see cref="DatePrecision.Day"/>
+    /// (exact match). Use <see cref="DatePrecision.Year"/> or <see cref="DatePrecision.Month"/>
+    /// when the query or the scraped data only has partial date information.
+    /// </summary>
+    public DatePrecision DatePrecision { get; init; } = DatePrecision.Day;
+
+    /// <summary>Gender string (e.g. "M", "F", "Male", "Female"). Case-insensitive exact match.</summary>
+    public Gender? Gender { get; init; } = Responses.Gender.Unspecified;
+
+    /// <summary>
+    /// 0–1 fuzzy edit distance ratio for name matching (0 = exact, 1 = very loose).
+    /// Maps to Lucene FuzzyQuery MAX_EDITS. Values: 0.0 → 0 edits, &gt;0 → 2 edits.
+    /// Default: 0.7 (equivalent to ~2 Levenshtein edits for typical names).
+    /// </summary>
+    public float Fuzziness { get; init; } = 0.7f;
+
+    /// <summary>Maximum number of hits to return. Default 25.</summary>
+    public int MaxResults { get; init; } = 25;
+}
+// -----------------------------
+// Gender.cs
+namespace CarteScolaire.Data.Responses;
+
+/// <summary>
+/// A simple enum representing available genders
+/// </summary>
+public enum Gender
+{
+    Male, Female, Unspecified
+}
+
+// -----------------------------
+// Result.cs
+namespace CarteScolaire.Data.Responses;
+
+
+using System.Diagnostics.CodeAnalysis;
+
+/// <summary>
+/// Represents the result of an operation, either a success with a value or a failure with an error.
+/// </summary>
+/// <typeparam name="T">The type of the value on success.</typeparam>
+public readonly record struct Result<T>
+{
+    private readonly T _value;
+    private readonly string? _error;
+    private readonly bool _isSuccess;
+
+    private Result(T value)
+    {
+        _value = value;
+        _error = null;
+        _isSuccess = true;
+    }
+
+    private Result(string error)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(error);
+
+        // We must assign '_value'. We use 'default!' to suppress warnings,
+        // as it will never be accessed in a failure state.
+        _value = default!;
+        _error = error;
+        _isSuccess = false;
+    }
+
+    /// <summary>
+    /// Indicates whether the operation was successful.
+    /// </summary>
+    [MemberNotNullWhen(false, nameof(_error))]
+    public bool IsSuccess => _isSuccess;
+
+    /// <summary>
+    /// Indicates whether the operation failed.
+    /// </summary>
+    public bool IsFailure => !_isSuccess;
+
+    /// <summary>
+    /// Gets the success value. Throws if the result is a failure.
+    /// </summary>
+    public T Value => !_isSuccess
+        ? throw new InvalidOperationException($"Cannot access Value of a failed result. Error: {_error}")
+        : _value;
+
+    /// <summary>
+    /// Gets the error message. Throws if the result is a success.
+    /// </summary>
+    public string Error => _isSuccess
+        ? throw new InvalidOperationException("Cannot access Error of a successful result.")
+        : _error!;
+
+    /// <summary>
+    /// Creates a successful result.
+    /// </summary>
+    public static Result<T> Success(T value) => new(value);
+
+    /// <summary>
+    /// Creates a failed result.
+    /// </summary>
+    public static Result<T> Failure(string error) => new(error);
+
+    /// <summary>
+    /// Executes different actions based on success or failure.
+    /// </summary>
+    public void Match(Action<T> onSuccess, Action<string> onFailure)
+    {
+        if (_isSuccess) onSuccess?.Invoke(_value);
+        else onFailure?.Invoke(_error!);
+    }
+
+    /// <summary>
+    /// Returns a value based on success or failure.
+    /// </summary>
+    public TResult Match<TResult>(Func<T, TResult> onSuccess, Func<string, TResult> onFailure)
+        => _isSuccess ? onSuccess(_value) : onFailure(_error!);
+
+
+    /// <summary>
+    /// Maps the success value to a new type.
+    /// </summary>
+    public Result<TResult> Map<TResult>(Func<T, TResult> mapper) =>
+        _isSuccess ? mapper(_value) : Result<TResult>.Failure(_error!);
+
+
+    /// <summary>
+    /// Flat maps the success value to a new Result.
+    /// </summary>
+    public Result<TResult> Bind<TResult>(Func<T, Result<TResult>> binder) =>
+        _isSuccess ? binder(_value) : Result<TResult>.Failure(_error!);
+
+
+    /// <summary>
+    /// Executes an action if the result is successful.
+    /// </summary>
+    public Result<T> OnSuccess(Action<T> action)
+    {
+        if (_isSuccess) action?.Invoke(_value);
+        return this;
+    }
+
+    /// <summary>
+    /// Executes an action if the result is a failure.
+    /// </summary>
+    public Result<T> OnFailure(Action<string> action)
+    {
+        if (!_isSuccess) action?.Invoke(_error!);
+        return this;
+    }
+
+    /// <summary>
+    /// Returns the value if successful, otherwise returns the default value.
+    /// </summary>
+    public T GetValueOrDefault(T defaultValue = default!) => _isSuccess ? _value : defaultValue;
+
+
+    /// <summary>
+    /// Returns the value if successful, otherwise computes and returns a fallback value.
+    /// </summary>
+    public T GetValueOrElse(Func<string, T> fallback) => _isSuccess ? _value : fallback(_error!);
+
+
+
+    /// <summary>
+    /// Tries to get the value, returning true if successful.
+    /// </summary>
+    /// <remarks>
+    /// This is the standard .NET 'Try' pattern.
+    /// 'value' will be the success value or default(T) on failure.
+    /// 'error' will be the error message or null on success.
+    /// </remarks>
+    public bool TryGetValue([MaybeNullWhen(false)] out T value, out string? error)
+    {
+        if (_isSuccess)
+        {
+            value = _value;
+            error = null;
+            return true;
+        }
+        else
+        {
+            value = default!; // '_value' is already default(T)! but this is clearer
+            error = _error!;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Converts the result to a string representation.
+    /// </summary>
+    public override string ToString() => _isSuccess ? $"Success({_value})" : $"Failure({_error})";
+
+    /// <summary>
+    /// Implicitly converts a value to a successful Result.
+    /// </summary>
+    public static implicit operator Result<T>(T value) => Success(value);
+}
+
+// -----------------------------
+// StudentInfoResponse.cs
+using CarteScolaire.Data.Queries;
+
+namespace CarteScolaire.Data.Responses;
+
+/// <summary>
+/// A class representing a response to a query about a student.
+/// </summary>
+public readonly record struct StudentInfoResponse
+{
+    /// <summary>
+    /// The student's unique registration ID (Matricule in French).
+    /// </summary>
+    public required string RegistrationId { get; init; }
+
+    /// <summary>
+    /// The full name of the student.
+    /// </summary>
+    [SearchField(Boost = 3.0f)]
+    public required string Name { get; init; }
+
+    /// <summary>
+    /// The student's date of birth. This can be null.
+    /// </summary>
+    [SearchField(FieldType = SearchFieldType.Date, Boost = 2.0f)]
+    public DateOnly? DateOfBirth { get; init; }
+
+    /// <summary>
+    /// The student's gender.
+    /// </summary>
+    [SearchField(FieldType = SearchFieldType.Keyword, Boost = 2.0f)]
+    public required Gender Gender { get; init; }
+
+    /// <summary>
+    /// The name of the student's school.
+    /// </summary>
+    public required string SchoolName { get; init; }
+
+    /// <summary>
+    /// The class or grade level of the student.
+    /// </summary>
+    public required string Class { get; init; }
+}
+
+// -----------------------------
+// IHtmlParser.cs
+using CarteScolaire.Data.Responses;
+
+namespace CarteScolaire.Data.Services;
+
+/// <summary>
+/// A simple abstraction representing an HTML parser.
+/// </summary>
+/// <typeparam name="T">The type of the class into which the HTML will be parsed.
+/// This must be a reference type.</typeparam>
+public interface IHtmlParser<T> where T : notnull
+{
+    /// <summary>
+    /// Asynchronously parses data from an input stream.
+    /// </summary>
+    /// <typeparam name="T">The type of the successful parsing result.</typeparam>
+    /// <param name="stream">The input stream containing the data to be parsed.</param>
+    /// <param name="cancellationToken">Token to observe for cancellation. Optional.</param>
+    /// <returns>A task that represents the asynchronous operation. 
+    /// The task result contains a <see cref="Result{T}"/> indicating success with the parsed data 
+    /// or a failure with an error message.</returns>
+    public Task<Result<IReadOnlyCollection<T>>> ParseAsync(Stream stream, CancellationToken cancellationToken = default);
+}
+
+// -----------------------------
+// IStudentInfoService.cs
+using CarteScolaire.Data.Queries;
+using CarteScolaire.Data.Responses;
+
+namespace CarteScolaire.Data.Services;
+
+/// <summary>
+/// A service to query https://cartescolaire.cm for student information.
+/// </summary>
+public interface IStudentInfoService
+{
+    /// <summary>
+    /// Asynchronously retrieves a collection of <see cref="StudentInfoResponse"/> objects based on the specified query parameters.
+    /// </summary>
+    /// <param name="query">The query containing filters such student name, gender, or date of birth. Must not be <c>null</c>.</param>
+    /// <param name="cancellationToken">Token to observe for cancellation requests. Optional.</param>
+    /// <returns>
+    /// A task representing the asynchronous operation. The task result contains a <see cref="Result{T}"/>,
+    /// which is either a success with a read-only collection of <see cref="StudentInfoResponse"/> 
+    /// matching the criteria, or a failure with an error message.
+    /// </returns>
+    public Task<Result<StudentInfoCollection>> GetStudentInfoAsync(SearchQuery query, CancellationToken cancellationToken = default);
+}
+
+// -----------------------------
+// ITokenProvider.cs
+namespace CarteScolaire.Data.Services;
+
+/// <summary>
+/// A simple token provider interface.
+/// To effectively query the https://cartescolaire.cm API,
+/// a token must be passed as part of the query parameters.
+/// This interface provides such a token.
+/// </summary>
+/// <typeparam name="T">The type of token that will be provided.</typeparam>
+public interface ITokenProvider<T> where T : class
+{
+    /// <summary>
+    /// Asynchronously provides a token of type <typeparamref name="T"/> to be used in query parameters.
+    /// </summary>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>
+    /// A task representing the asynchronous operation. The task result contains a <typeparamref name="T"/> token
+    /// </returns>
+    public Task<T> GetTokenAsync(CancellationToken cancellationToken = default);
+}
+
+// -----------------------------
+// AnalyzerProvider.cs
+using CarteScolaire.Data.Queries;
+using Lucene.Net.Analysis.Core;
+using Lucene.Net.Analysis.Miscellaneous;
+using Lucene.Net.Analysis.Standard;
+using Lucene.Net.Analysis;
+using Lucene.Net.Util;
+
+namespace CarteScolaire.DataImpl.FuzzySearch;
+
+/// <summary>
+/// Builds a <see cref="PerFieldAnalyzerWrapper"/> that applies the most
+/// appropriate analyzer for each field type:
+///
+///   Text    → <see cref="StandardAnalyzer"/>  (lower-case, stop-words, tokens)
+///   Keyword → <see cref="KeywordAnalyzer"/>   (single token, exact match)
+///   Date    → <see cref="KeywordAnalyzer"/>   (yyyyMMdd — no tokenisation needed)
+/// </summary>
+internal static class AnalyzerProvider
+{
+    public static Analyzer BuildForType<T>(LuceneVersion version)
+    {
+        IReadOnlyList<FieldDescriptor> fields = FieldMetadataCache.Instance.GetFields<T>();
+        Dictionary<string, Analyzer> map = new();
+
+        foreach (FieldDescriptor f in fields)
+        {
+            map[f.LuceneFieldName] = f.FieldType switch
+            {
+                SearchFieldType.Text => new StandardAnalyzer(version),
+                SearchFieldType.Keyword => new KeywordAnalyzer(),
+                SearchFieldType.Date => new KeywordAnalyzer(),
+                _ => new StandardAnalyzer(version)
+            };
+        }
+
+        // Default fallback analyzer for any un-mapped fields
+        using StandardAnalyzer defaultAnalyzer = new(version);
+        return new PerFieldAnalyzerWrapper(defaultAnalyzer, map);
+    }
+}
+// -----------------------------
+// DocumentMapper.cs
+using System.Globalization;
+using CarteScolaire.Data.Queries;
+using Lucene.Net.Documents;
+
+namespace CarteScolaire.DataImpl.FuzzySearch;
+
+/// <summary>
+/// Converts a POCO of type <typeparamref name="T"/> into a Lucene
+/// <see cref="Document"/> and back, using <see cref="SearchFieldAttribute"/>
+/// metadata discovered via <see cref="FieldMetadataCache"/>.
+/// </summary>
+internal sealed class DocumentMapper<T>
+{
+    // Internal field that holds the original item's index in the source list,
+    // so we can return the real T instance rather than reconstructing it.
+    private const string IdField = "__id";
+
+    private readonly IReadOnlyList<FieldDescriptor> _fields = FieldMetadataCache.Instance.GetFields<T>();
+
+    // ---- T → Document ----
+
+    public Document ToDocument(T item, int sourceIndex)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+
+        Document doc = [new StoredField(IdField, sourceIndex)];
+
+        foreach (FieldDescriptor f in _fields)
+        {
+            string? value = f.GetStringValue(item);
+            if (string.IsNullOrWhiteSpace(value)) continue;
+
+            Field.Store store = f.Store ? Field.Store.YES : Field.Store.NO;
+
+            Field luceneField = f.FieldType switch
+            {
+                SearchFieldType.Text => new TextField(f.LuceneFieldName, value, store),
+
+                SearchFieldType.Keyword =>
+                    // StringField = indexed but NOT tokenised (exact match)
+                    new StringField(f.LuceneFieldName, value.ToLowerInvariant(), store),
+
+                SearchFieldType.Date =>
+                    // Stored as yyyyMMdd string; KeywordAnalyzer keeps it intact
+                    new StringField(f.LuceneFieldName, value, store),
+
+                _ => new TextField(f.LuceneFieldName, value, store)
+            };
+
+            doc.Add(luceneField);
+        }
+
+        return doc;
+    }
+
+    // ---- Document → source index ----
+
+    public static int GetSourceIndex(Document doc)
+    {
+        string? raw = doc.Get(IdField, CultureInfo.InvariantCulture);
+        return raw is not null ? int.Parse(raw, CultureInfo.InvariantCulture) : -1;
+    }
+}
+
+// -----------------------------
+// FieldMetadataCache.cs
+using System.Collections.Concurrent;
+using System.Globalization;
+using System.Reflection;
+using CarteScolaire.Data.Queries;
+
+namespace CarteScolaire.DataImpl.FuzzySearch;
+
+/// <summary>
+/// Reads and caches <see cref="SearchFieldAttribute"/> metadata for a type.
+/// Uses a concurrent dictionary so it is safe to call from multiple threads.
+/// </summary>
+internal sealed class FieldMetadataCache
+{
+    // ---- singleton ----
+    public static readonly FieldMetadataCache Instance = new();
+    private FieldMetadataCache() { }
+
+    // ---- cache ----
+    private readonly ConcurrentDictionary<Type, IReadOnlyList<FieldDescriptor>> _cache = new();
+
+    public IReadOnlyList<FieldDescriptor> GetFields<T>() => _cache.GetOrAdd(typeof(T), BuildDescriptors);
+
+    // ---- internals ----
+    private static IReadOnlyList<FieldDescriptor> BuildDescriptors(Type type)
+    {
+        List<FieldDescriptor> descriptors = [];
+        PropertyInfo[] properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        foreach (PropertyInfo prop in properties)
+        {
+            SearchFieldAttribute? attr = prop.GetCustomAttribute<SearchFieldAttribute>();
+            if (attr is null)
+                continue;
+
+            descriptors.Add(new FieldDescriptor(
+                property: prop,
+                luceneFieldName: attr.FieldName ?? prop.Name.ToLowerInvariant(),
+                fieldType: attr.FieldType,
+                boost: attr.Boost,
+                store: attr.Store));
+        }
+        // Sort for consistent order (e.g., deterministic query building)
+        descriptors.Sort((a, b) => string.Compare(a.LuceneFieldName, b.LuceneFieldName, StringComparison.Ordinal));
+        return descriptors.AsReadOnly();
+    }
+}
+
+internal sealed class FieldDescriptor
+{
+    public PropertyInfo Property { get; }
+    public string LuceneFieldName { get; }
+    public SearchFieldType FieldType { get; }
+    public float Boost { get; }
+    public bool Store { get; }
+
+    public FieldDescriptor(PropertyInfo property, string luceneFieldName, SearchFieldType fieldType, float boost, bool store)
+    {
+        Property = property ?? throw new ArgumentNullException(nameof(property));
+        LuceneFieldName = luceneFieldName ?? throw new ArgumentNullException(nameof(luceneFieldName));
+        FieldType = fieldType;
+        Boost = boost;
+        Store = store;
+    }
+
+    /// <summary>Gets the string value for a given object instance.</summary>
+    public string? GetStringValue(object? instance)
+    {
+        if (instance is null) return null;
+        object? raw = Property.GetValue(instance);
+        if (raw is null) return null;
+
+        // Normalise dates to yyyyMMdd for Lucene storage / range queries
+        if (FieldType == SearchFieldType.Date)
+        {
+            return raw switch
+            {
+                DateOnly d => d.ToString("yyyyMMdd", CultureInfo.InvariantCulture),
+                DateTime dt => dt.ToString("yyyyMMdd", CultureInfo.InvariantCulture),
+                string s => s, // assume caller already formatted
+                _ => Convert.ToString(raw, CultureInfo.InvariantCulture)
+            };
+        }
+        return Convert.ToString(raw, CultureInfo.InvariantCulture);
+    }
+}
+// -----------------------------
+// FuzzySearchService.cs
+using CarteScolaire.Data.Queries;
+using Lucene.Net.Analysis;
+using Lucene.Net.Documents;
+using Lucene.Net.Index;
+using Lucene.Net.Search;
+using Lucene.Net.Store;
+using Lucene.Net.Util;
+
+namespace CarteScolaire.DataImpl.FuzzySearch;
+
+/// <summary>
+/// Generic, in-memory Lucene.NET search service.
+///
+/// Lifecycle:
+/// 1. Create once and reuse (thread-safe reads after <see cref="Build"/>).
+/// 2. Call <see cref="Build"/> whenever the source collection changes.
+/// 3. Call <see cref="Search"/> for each user query — O(log N) with Lucene.
+/// 4. Dispose when no longer needed.
+///
+/// Type parameter <typeparamref name="T"/> must have at least one property
+/// decorated with <see cref="SearchFieldAttribute"/>.
+/// </summary>
+internal sealed class FuzzySearchService<T> : IDisposable
+{
+    // Lucene version pinned project-wide
+    private const LuceneVersion LuceneVer = LuceneVersion.LUCENE_48;
+
+    private readonly DocumentMapper<T> _mapper = new();
+    private readonly Analyzer _analyzer;
+    private readonly QueryBuilder<T> _queryBuilder;
+
+    // Mutable state — protected by _lock during rebuild, read-only during search
+    private readonly ReaderWriterLockSlim _lock = new();
+
+    private RAMDirectory? _directory;
+    private DirectoryReader? _reader;
+    private IndexSearcher? _searcher;
+    private IReadOnlyList<T> _source = [];
+    private bool _disposed;
+
+    public FuzzySearchService()
+    {
+        _analyzer = AnalyzerProvider.BuildForType<T>(LuceneVer);
+        _queryBuilder = new QueryBuilder<T>(_analyzer);
+    }
+
+    /// <summary>
+    /// Indexes all items in <paramref name="items"/>.
+    /// Safe to call multiple times — rebuilds the index from scratch each time.
+    /// </summary>
+    /// <param name="items">The collection scraped and transformed from the website.</param>
+    public void Build(IEnumerable<T> items)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(items);
+
+        IReadOnlyList<T> list = items as IReadOnlyList<T> ?? items.ToList(); // Materialize once
+
+        RAMDirectory newDir = new();
+        IndexWriterConfig config = new(LuceneVer, _analyzer)
+        {
+            OpenMode = OpenMode.CREATE,
+            RAMBufferSizeMB = 256d // Increase buffer for faster indexing on larger datasets
+        };
+
+        using IndexWriter writer = new(newDir, config);
+        int count = list.Count;
+
+        for (int i = 0; i < count; i++)
+        {
+            writer.AddDocument(_mapper.ToDocument(list[i], i));
+        }
+
+        writer.Flush(triggerMerge: false, applyAllDeletes: false);
+        writer.Commit();
+
+        DirectoryReader? newReader = DirectoryReader.Open(newDir);
+        IndexSearcher newSearcher = new(newReader);
+
+        // Swap atomically
+        _lock.EnterWriteLock();
+        try
+        {
+            DisposeIndex();
+            _directory = newDir;
+            _reader = newReader;
+            _searcher = newSearcher;
+            _source = list;
+        }
+        finally
+        {
+            _lock.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// Executes a structured search against the current index.
+    /// </summary>
+    /// <param name="query">The search criteria. Null/empty fields are ignored.</param>
+    /// <returns>
+    /// Scored results ordered by relevance, capped at <see cref="SearchQuery.MaxResults"/>.
+    /// </returns>
+    public IReadOnlyList<SearchResult<T>> Search(SearchQuery query)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(query);
+
+        IndexSearcher? searcher;
+        IReadOnlyList<T>? source;
+
+        _lock.EnterReadLock();
+        try
+        {
+            searcher = _searcher ?? throw new InvalidOperationException($"Index not built. Call {nameof(Build)} before {nameof(Search)}.");
+            source = _source;
+        }
+        finally
+        {
+            _lock.ExitReadLock();
+        }
+
+        Query luceneQuery = _queryBuilder.Build(query);
+        TopDocs? topDocs = searcher.Search(luceneQuery, query.MaxResults);
+
+        if (topDocs.TotalHits == 0)
+        {
+            return [];
+        }
+
+        float topScore = topDocs.ScoreDocs[0].Score;
+        List<SearchResult<T>> results = new(topDocs.ScoreDocs.Length);
+        ScoreDoc[]? scoreDocs = topDocs.ScoreDocs;
+        int length = scoreDocs.Length;
+
+        for (int rank = 0; rank < length; rank++)
+        {
+            ScoreDoc scoreDoc = scoreDocs[rank];
+            Document? doc = searcher.Doc(scoreDoc.Doc);
+            int idx = DocumentMapper<T>.GetSourceIndex(doc);
+            if (idx < 0 || idx >= source.Count) continue;
+
+            float normalised = topScore > 0f ? scoreDoc.Score / topScore : 0f;
+
+            results.Add(new SearchResult<T>(
+                item: source[idx],
+                score: normalised,
+                rank: rank + 1));
+        }
+
+        return results.AsReadOnly();
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+
+        _lock.EnterWriteLock();
+        try
+        {
+            DisposeIndex();
+            _analyzer.Dispose();
+            _disposed = true;
+        }
+        finally
+        {
+            _lock.ExitWriteLock();
+        }
+        _lock.Dispose();
+    }
+
+    private void DisposeIndex()
+    {
+        _reader?.Dispose();
+        _directory?.Dispose();
+        _reader = null;
+        _directory = null;
+        _searcher = null;
+    }
+}
+// -----------------------------
+// QueryBuilder.cs
+using System.Globalization;
+using CarteScolaire.Data.Queries;
+using Lucene.Net.Analysis;
+using Lucene.Net.Analysis.TokenAttributes;
+using Lucene.Net.Index;
+using Lucene.Net.Search;
+
+namespace CarteScolaire.DataImpl.FuzzySearch;
+
+/// <summary>
+/// Translates a <see cref="SearchQuery"/> into a Lucene <see cref="Query"/>.
+///
+/// Strategy:
+/// • Name → BooleanQuery combining:
+/// - MultiPhraseQuery (exact phrase, highest boost)
+/// - FuzzyQuery per token (handles typos)
+/// - PrefixQuery per token (handles partial input)
+/// • DOB → TermQuery on the formatted date field (exact filter)
+/// • Gender → TermQuery on lowercased keyword field (exact filter)
+///
+/// Name uses SHOULD (OR — for ranking). DOB and Gender use MUST (AND — hard filters).
+/// A document that does not match the gender or DOB is excluded entirely.
+/// </summary>
+internal sealed class QueryBuilder<T>(Analyzer analyzer)
+{
+    private const int FuzzyMaxEdits = 2; // Levenshtein distance
+    private readonly IReadOnlyList<FieldDescriptor> _fields = FieldMetadataCache.Instance.GetFields<T>();
+
+    public Query Build(SearchQuery query)
+    {
+        BooleanQuery root = [];
+        bool hasAnyClause = false;
+
+        // ---- Name ----
+        if (!string.IsNullOrWhiteSpace(query.Name))
+        {
+            List<FieldDescriptor> nameFields = GetFieldsByType(SearchFieldType.Text);
+            if (nameFields.Count > 0)
+            {
+                BooleanQuery nameQuery = BuildNameQuery(query.Name.Trim(), nameFields, query.Fuzziness);
+                root.Add(nameQuery, Occur.SHOULD);
+                hasAnyClause = true;
+            }
+        }
+
+        // ---- Date of birth — MUST: hard filter ----
+        if (query.DateOfBirth.HasValue)
+        {
+            List<FieldDescriptor> dobFields = GetFieldsByType(SearchFieldType.Date);
+            if (dobFields.Count > 0)
+            {
+                string prefix = BuildDatePrefix(query.DateOfBirth.Value, query.DatePrecision);
+                BooleanQuery dobBlock = [];
+
+                foreach (FieldDescriptor f in dobFields)
+                {
+                    Query dobQuery = query.DatePrecision == DatePrecision.Day
+                        ? new TermQuery(new Term(f.LuceneFieldName, prefix))
+                        : new PrefixQuery(new Term(f.LuceneFieldName, prefix));
+                    dobBlock.Add(dobQuery, Occur.SHOULD);
+                }
+
+                root.Add(dobBlock, Occur.MUST);
+                hasAnyClause = true;
+            }
+        }
+
+        // ---- Gender — MUST: hard filter ----
+        if (query.Gender.HasValue)
+        {
+            List<FieldDescriptor> genderFields = GetFieldsByType(SearchFieldType.Keyword);
+            if (genderFields.Count > 0)
+            {
+                BooleanQuery genderBlock = [];
+                string genderTerm = query.Gender.Value.ToString().ToLowerInvariant();
+                foreach (FieldDescriptor f in genderFields)
+                {
+                    genderBlock.Add(new TermQuery(new Term(f.LuceneFieldName, genderTerm)), Occur.SHOULD);
+                }
+                root.Add(genderBlock, Occur.MUST);
+                hasAnyClause = true;
+            }
+        }
+
+        if (!hasAnyClause)
+        {
+            throw new ArgumentException("SearchQuery must have at least one non-null field.", nameof(query));
+        }
+
+        return root;
+    }
+
+    private List<FieldDescriptor> GetFieldsByType(SearchFieldType type)
+        => _fields.Where(f => f.FieldType == type).ToList();
+
+    private BooleanQuery BuildNameQuery(string name, IReadOnlyList<FieldDescriptor> fields, float fuzziness)
+    {
+        BooleanQuery outer = [];
+        int editDistance = fuzziness > 0f ? FuzzyMaxEdits : 0;
+        List<string> tokens = Tokenise(name, fields[0].LuceneFieldName).ToList(); // Tokenize once, assuming same analyzer behavior across fields
+
+        foreach (FieldDescriptor field in fields)
+        {
+            BooleanQuery fieldQuery = [];
+
+            // 1. Exact phrase (highest boost)
+            if (tokens.Count > 0)
+            {
+                PhraseQuery phraseQuery = [];
+
+                foreach (string token in tokens)
+                {
+                    phraseQuery.Add(new Term(field.LuceneFieldName, token));
+                }
+
+                phraseQuery.Boost = field.Boost * 4.0f;
+                fieldQuery.Add(phraseQuery, Occur.SHOULD);
+            }
+
+            // 2. Per-token fuzzy + prefix
+            foreach (string token in tokens)
+            {
+                if (string.IsNullOrWhiteSpace(token))
+                    continue;
+
+                // Fuzzy — handles typos
+                if (editDistance > 0)
+                {
+                    FuzzyQuery fuzzy = new(
+                        new Term(field.LuceneFieldName, token),
+                        maxEdits: editDistance,
+                        prefixLength: Math.Max(1, token.Length / 3))
+                    {
+                        Boost = field.Boost * 2.0f
+                    };
+
+                    fieldQuery.Add(fuzzy, Occur.SHOULD);
+                }
+                else
+                {
+                    TermQuery exact = new(new Term(field.LuceneFieldName, token))
+                    {
+                        Boost = field.Boost * 2.5f
+                    };
+
+                    fieldQuery.Add(exact, Occur.SHOULD);
+                }
+
+                // Prefix — handles partial input
+                PrefixQuery prefix = new(new Term(field.LuceneFieldName, token))
+                {
+                    Boost = field.Boost * 1.5f
+                };
+
+                fieldQuery.Add(prefix, Occur.SHOULD);
+            }
+
+            if (fieldQuery.GetClauses().Length > 0)
+            {
+                outer.Add(fieldQuery, Occur.SHOULD);
+            }
+        }
+
+        return outer;
+    }
+
+    private static string BuildDatePrefix(DateOnly date, DatePrecision precision) =>
+        precision switch
+        {
+            DatePrecision.Year => date.ToString("yyyy", CultureInfo.InvariantCulture),
+            DatePrecision.Month => date.ToString("yyyyMM", CultureInfo.InvariantCulture),
+            _ => date.ToString("yyyyMMdd", CultureInfo.InvariantCulture)
+        };
+
+    private IEnumerable<string> Tokenise(string text, string fieldName)
+    {
+        List<string> tokens = [];
+        using TokenStream? ts = analyzer.GetTokenStream(fieldName, new StringReader(text)); // Use StringReader for efficiency
+        ICharTermAttribute? termAtt = ts.GetAttribute<ICharTermAttribute>();
+        ts.Reset();
+        while (ts.IncrementToken())
+        {
+            tokens.Add(termAtt.ToString());
+        }
+        ts.End();
+        return tokens;
+    }
+}
+// -----------------------------
+// SearchResult.cs
+namespace CarteScolaire.DataImpl.FuzzySearch;
+
+/// <summary>
+/// A scored search result wrapping the original typed item.
+/// </summary>
+internal sealed class SearchResult<T>(T item, float score, int rank)
+{
+    /// <summary>The matched item from the source collection.</summary>
+    public T Item { get; init; } = item;
+
+    /// <summary>
+    /// Lucene relevance score (higher = closer match).
+    /// Normalised to [0, 1] relative to the top hit in the result set.
+    /// </summary>
+    public float Score { get; init; } = score;
+
+    /// <summary>Rank within the result set (1-based).</summary>
+    public int Rank { get; init; } = rank;
+
+    public override string ToString() => $"[#{Rank} score={Score:F4}] {Item}";
+}
+
+// -----------------------------
+// GlobalUsings.cs
+global using StudentInfoCollection = System.Collections.Generic.IReadOnlyCollection<CarteScolaire.Data.Responses.StudentInfoResponse>;
+
+// -----------------------------
+// TokenAppendingHandler.cs
+using System.Collections.Specialized;
+using System.Net;
+using System.Text;
+using System.Web;
+using CarteScolaire.Data.Services;
+using Microsoft.Extensions.Logging;
+using ZiggyCreatures.Caching.Fusion;
+
+namespace CarteScolaire.DataImpl.Handlers;
+
+internal sealed class TokenAppendingHandler(
+    ITokenProvider<string> tokenProvider,
+    IFusionCache cache,
+    ILogger<TokenAppendingHandler> logger) : DelegatingHandler
+{
+    private const string CacheKey = "csrf-token";
+    private const string TokenQueryKey = "_token"; // Made constant for easy config change
+
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        if (request.RequestUri is null)
+        {
+            logger.LogWarning("RequestUri is null. Ensure 'BaseAddress' is configured on the HttpClient.");
+            return CreateTokenFailureResponse("Invalid request: missing Request Uri.");
+        }
+
+        try
+        {
+            string token = await cache.GetOrSetAsync(
+                CacheKey,
+                async ct => await tokenProvider.GetTokenAsync(ct).ConfigureAwait(false),
+                options => options
+                    .SetDuration(TimeSpan.FromHours(2))
+                    .SetFailSafe(true)
+                    .SetFactoryTimeouts(TimeSpan.FromSeconds(10))
+                    .SetEagerRefresh(0.9f),
+                cancellationToken
+            ).ConfigureAwait(false);
+
+            return await AppendTokenAndSendAsync(request, token, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to obtain CSRF token");
+            return CreateTokenFailureResponse(ex.Message);
+        }
+    }
+
+    private Task<HttpResponseMessage> AppendTokenAndSendAsync(HttpRequestMessage request, string token, CancellationToken cancellationToken)
+    {
+        UriBuilder uriBuilder = new(request.RequestUri!);
+        NameValueCollection parts = HttpUtility.ParseQueryString(uriBuilder.Query);
+
+        parts[TokenQueryKey] = token;
+        uriBuilder.Query = parts.ToString() ?? string.Empty;
+        request.RequestUri = uriBuilder.Uri;
+
+        // Proceed with the modified request
+        return base.SendAsync(request, cancellationToken);
+    }
+
+    private static HttpResponseMessage CreateTokenFailureResponse(string? message)
+    {
+        string text = string.IsNullOrEmpty(message)
+            ? "An unknown error occurred while retrieving the CSRF token."
+            : message;
+
+        return new HttpResponseMessage(HttpStatusCode.InternalServerError)
+        {
+            ReasonPhrase = text,
+            Content = new StringContent(text, Encoding.UTF8, "text/plain")
+        };
+    }
+}
+
+// -----------------------------
+// ResultExtensions.cs
+namespace CarteScolaire.DataImpl.Helpers;
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Data.Responses;
+
+/// <summary>
+/// Extension methods for working with Result types.
+/// </summary>
+public static class ResultExtensions
+{
+    /// <summary>
+    /// Converts a nullable value to a Result.
+    /// </summary>
+    public static Result<T> ToResult<T>(this T? value, string errorMessage) where T : class
+        => value ?? Result<T>.Failure(errorMessage);
+
+
+    /// <summary>
+    /// Converts a nullable value type to a Result.
+    /// </summary>
+    public static Result<T> ToResult<T>(this T? value, string errorMessage) where T : struct
+        => value ?? Result<T>.Failure(errorMessage);
+
+
+    /// <summary>
+    /// Executes an operation and wraps it in a Result, catching exceptions.
+    /// </summary>
+    public static Result<T> Try<T>(Func<T> operation, Func<Exception, string>? errorMapper = null)
+    {
+        try
+        {
+            ArgumentNullException.ThrowIfNull(operation);
+            return operation();
+        }
+        catch (Exception ex)
+        {
+            string errorMessage = errorMapper?.Invoke(ex) ?? ex.Message;
+            return Result<T>.Failure(errorMessage);
+        }
+    }
+
+    /// <summary>
+    /// Executes an asynchronous operation and wraps it in a Result, catching exceptions.
+    /// </summary>
+    public static async Task<Result<T>> TryAsync<T>(Func<Task<Result<T>>> operation, Func<Exception, string>? errorMapper = null)
+    {
+        try
+        {
+            ArgumentNullException.ThrowIfNull(operation);
+            return await operation().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            string errorMessage = errorMapper?.Invoke(ex) ?? ex.Message;
+            return Result<T>.Failure(errorMessage);
+        }
+    }
+
+    /// <summary>
+    /// Combines multiple results into a single result containing a collection.
+    /// Fails on the first failure found.
+    /// </summary>
+    public static Result<IEnumerable<T>> Combine<T>(this IEnumerable<Result<T>> results)
+    {
+        // We must materialize the list to check for failures and then select values.
+        List<Result<T>> resultsList = results.ToList();
+
+        // Using FirstOrDefault with a struct is dangerous, as default(Result<T>)
+        // would report IsFailure = true, leading to a bug.
+        // A simple loop is the safest and most correct way to find the first failure.
+        // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
+        foreach (Result<T> result in resultsList)
+        {
+            if (result.IsFailure)
+            {
+                // Fail-fast on the first error.
+                return Result<IEnumerable<T>>.Failure(result.Error);
+            }
+        }
+
+        // If we get here, all results were successful.
+        return Result<IEnumerable<T>>.Success(resultsList.Select(r => r.Value));
+    }
+
+    /// <summary>
+    /// Ensures a condition is met, otherwise returns a failure.
+    /// </summary>
+    public static Result<T> Ensure<T>(this Result<T> result, Func<T, bool> predicate, string errorMessage)
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+
+        if (result.IsFailure)
+            return result;
+
+        return predicate(result.Value)
+            ? result
+            : Result<T>.Failure(errorMessage);
+    }
+}
+// -----------------------------
+// .NETCoreApp,Version=v9.0.AssemblyAttributes.cs
+// <autogenerated />
+using System;
+using System.Reflection;
+[assembly: global::System.Runtime.Versioning.TargetFrameworkAttribute(".NETCoreApp,Version=v9.0", FrameworkDisplayName = ".NET 9.0")]
+
+// -----------------------------
+// CarteScolaire.DataImpl.AssemblyInfo.cs
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     Ce code a été généré par un outil.
+//     Version du runtime :4.0.30319.42000
+//
+//     Les modifications apportées à ce fichier peuvent provoquer un comportement incorrect et seront perdues si
+//     le code est régénéré.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: System.Reflection.AssemblyCompanyAttribute("RVK")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0c2138fe04f8a4b009e76761a08cea3ac4c47eb4")]
+[assembly: System.Reflection.AssemblyProductAttribute("CarteScolaire.DataImpl")]
+[assembly: System.Reflection.AssemblyTitleAttribute("CarteScolaire.DataImpl")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("CarteScolaire.Tests.Unit")]
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("DynamicProxyGenAssembly2")]
+
+// Généré par la classe MSBuild WriteCodeFragment.
+
+
+// -----------------------------
+// CarteScolaire.DataImpl.GlobalUsings.g.cs
+// <auto-generated/>
+global using global::System;
+global using global::System.Collections.Generic;
+global using global::System.IO;
+global using global::System.Linq;
+global using global::System.Net.Http;
+global using global::System.Threading;
+global using global::System.Threading.Tasks;
+
+// -----------------------------
+// .NETCoreApp,Version=v9.0.AssemblyAttributes.cs
+// <autogenerated />
+using System;
+using System.Reflection;
+[assembly: global::System.Runtime.Versioning.TargetFrameworkAttribute(".NETCoreApp,Version=v9.0", FrameworkDisplayName = ".NET 9.0")]
+
+// -----------------------------
+// CarteScolaire.DataImpl.AssemblyInfo.cs
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     Ce code a été généré par un outil.
+//     Version du runtime :4.0.30319.42000
+//
+//     Les modifications apportées à ce fichier peuvent provoquer un comportement incorrect et seront perdues si
+//     le code est régénéré.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("CarteScolaire.Tests.Unit")]
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("DynamicProxyGenAssembly2")]
+[assembly: System.Reflection.AssemblyCompanyAttribute("CarteScolaire.DataImpl")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0c2138fe04f8a4b009e76761a08cea3ac4c47eb4")]
+[assembly: System.Reflection.AssemblyProductAttribute("CarteScolaire.DataImpl")]
+[assembly: System.Reflection.AssemblyTitleAttribute("CarteScolaire.DataImpl")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+
+// Généré par la classe MSBuild WriteCodeFragment.
+
+
+// -----------------------------
+// CarteScolaire.DataImpl.GlobalUsings.g.cs
+// <auto-generated/>
+global using global::System;
+global using global::System.Collections.Generic;
+global using global::System.IO;
+global using global::System.Linq;
+global using global::System.Net.Http;
+global using global::System.Threading;
+global using global::System.Threading.Tasks;
+
+// -----------------------------
+// ServiceCollectionExtensions.cs
+using AngleSharp;
+using CarteScolaire.Data.Responses;
+using CarteScolaire.Data.Services;
+using CarteScolaire.DataImpl.Handlers;
+using CarteScolaire.DataImpl.Services;
+using CarteScolaire.DataImpl.Services.HtmlParsers;
+using CarteScolaire.DataImpl.Services.TokenProviders;
+using Microsoft.Extensions.DependencyInjection;
+using ZiggyCreatures.Caching.Fusion;
+
+namespace CarteScolaire.DataImpl;
+
+public static class ServiceCollectionExtensions
+{
+    public static IServiceCollection RegisterImplementations(this IServiceCollection services)
+    {
+        ConfigureOptions(services);
+        RegisterDependencies(services);
+        ConfigureResilientHttpClients(services);
+        ConfigureCaching(services);
+        return services;
+    }
+
+    private static void ConfigureOptions(IServiceCollection services)
+    {
+        services
+            .AddOptionsWithValidateOnStart<TokenProviderOptions>()
+            .ValidateDataAnnotations()
+            .Configure(options =>
+            {
+                options.TokenSelector = "input[type='hidden'][name='_token']";
+                options.TokenEndpointPath = "/";
+            });
+
+        services
+            .AddOptionsWithValidateOnStart<SelectorOptions>()
+            .ValidateDataAnnotations()
+            .Configure(options =>
+            {
+                options.ResultSelector = "div.result-item";
+                options.RegistrationIdSelector = "p.actual-matricule";
+                options.NameSelector = "p.subtitle";
+                options.DateOfBirthSelector = "p.student-year";
+                options.SchoolNameSelector = "p.title";
+                options.GradeSelector = "p.student-class";
+                options.GenderSelector = "div.gender > p";
+            });
+    }
+
+    private static void RegisterDependencies(IServiceCollection services)
+    {
+        services.AddTransient<IHtmlParser<StudentInfoResponse>, StudentInfoHtmlParser>();
+        services.AddScoped<TokenAppendingHandler>();
+        services.AddSingleton(_ => BrowsingContext.New(Configuration.Default.WithDefaultLoader()));
+    }
+
+    private static void ConfigureResilientHttpClients(IServiceCollection services)
+    {
+        services.ConfigureHttpClientDefaults(config =>
+        {
+            config.ConfigureHttpClient(client =>
+            {
+                client.BaseAddress = new Uri("https://cartescolaire.cm");
+                client.DefaultRequestHeaders.Add("Accept", "text/html");
+                client.Timeout = TimeSpan.FromSeconds(100);
+            });
+
+            config.AddStandardResilienceHandler(options =>
+            {
+                // Retry Policy: 2 Attempts (Total 3 calls: 1 initial + 2 retries)
+                options.Retry.MaxRetryAttempts = 2;
+                options.Retry.BackoffType = Polly.DelayBackoffType.Exponential;
+                options.Retry.UseJitter = true;
+
+                // Attempt Timeout: Maximum time for a single HTTP request (20s)
+                options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(20);
+
+                // Circuit Breaker Policy: Opens if 20% of calls fail.
+                options.CircuitBreaker.FailureRatio = 0.2;
+
+                // Set the minimum number of requests (throughput) needed in the SamplingDuration 
+                // before the failure ratio calculation is performed.
+                options.CircuitBreaker.MinimumThroughput = 20;
+
+                // REVISED: Set sampling duration to a meaningful monitoring period (e.g., 60s)
+                options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(60);
+
+                // Total Timeout Policy: Max time for the entire operation (including retries).
+                // REVISED: Set a comfortable time, as 90s (from original calculation) may be too short
+                // due to Exponential Backoff and Jitter. 150 seconds is safer.
+                options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(150);
+            });
+
+        });
+
+        services
+            .AddHttpClient<IStudentInfoService, StudentInfoService>(client => client.BaseAddress = new Uri(client.BaseAddress!, "/get-matricule"))
+            .AddHttpMessageHandler<TokenAppendingHandler>();
+
+        services.AddHttpClient<ITokenProvider<string>, TokenProvider>(client => client.BaseAddress = new Uri(client.BaseAddress!, "/minesec"));
+    }
+
+    private static void ConfigureCaching(IServiceCollection services)
+    {
+        services
+            .AddFusionCache()
+            .TryWithAutoSetup()
+            .WithOptions(options => options.DefaultEntryOptions.Duration = TimeSpan.FromMinutes(2));
+    }
+}
+
+// -----------------------------
+// SelectorOptions.cs
+using System.ComponentModel.DataAnnotations;
+
+namespace CarteScolaire.DataImpl.Services.HtmlParsers;
+
+/// <summary>
+/// Defines the CSS selectors used to extract specific data fields 
+/// from a parsed HTML document, typically representing student or result information.
+/// </summary>
+internal sealed class SelectorOptions
+{
+    /// <summary>
+    /// Gets or sets the primary CSS selector used to identify the container element 
+    /// for a single result or student record within the document.
+    /// </summary>
+    /// <remarks>
+    /// This value must be non-empty (MinLength 1) and up to 50 characters long.
+    /// </remarks>
+    [Required, MinLength(1), MaxLength(50)]
+    public string ResultSelector { get; set; } = null!;
+
+    /// <summary>
+    /// Gets or sets the CSS selector for extracting the unique registration or 
+    /// identification number of the student.
+    /// </summary>
+    /// <remarks>
+    /// This value must be non-empty (MinLength 1) and up to 50 characters long.
+    /// </remarks>
+    [Required, MinLength(1), MaxLength(50)]
+    public string RegistrationIdSelector { get; set; } = null!;
+
+    /// <summary>
+    /// Gets or sets the CSS selector for extracting the student's full name.
+    /// </summary>
+    /// <remarks>
+    /// This value must be non-empty (MinLength 1) and up to 50 characters long.
+    /// </remarks>
+    [Required, MinLength(1), MaxLength(50)]
+    public string NameSelector { get; set; } = null!;
+
+    /// <summary>
+    /// Gets or sets the CSS selector for extracting the student's date of birth or enrollment year information.
+    /// </summary>
+    /// <remarks>
+    /// This value must be non-empty (MinLength 1) and up to 50 characters long.
+    /// </remarks>
+    [Required, MinLength(1), MaxLength(50)]
+    public string DateOfBirthSelector { get; set; } = null!;
+
+    /// <summary>
+    /// Gets or sets the CSS selector for extracting the name of the school or institution.
+    /// </summary>
+    /// <remarks>
+    /// This value must be non-empty (MinLength 1) and up to 50 characters long.
+    /// </remarks>
+    [Required, MinLength(1), MaxLength(50)]
+    public string SchoolNameSelector { get; set; } = null!;
+
+    /// <summary>
+    /// Gets or sets the CSS selector for extracting the academic grade or class level of the student.
+    /// </summary>
+    /// <remarks>
+    /// This value must be non-empty (MinLength 1) and up to 50 characters long.
+    /// </remarks>
+    [Required, MinLength(1), MaxLength(50)]
+    public string GradeSelector { get; set; } = null!;
+
+    /// <summary>
+    /// Gets or sets the CSS selector for extracting the student's gender information.
+    /// </summary>
+    /// <remarks>
+    /// This value must be non-empty (MinLength 1) and up to 50 characters long.
+    /// </remarks>
+    [Required, MinLength(1), MaxLength(50)]
+    public string GenderSelector { get; set; } = null!;
+}
+
+// -----------------------------
+// StudentInfoHtmlParser.cs
+using System.Diagnostics;
+using System.Globalization;
+using AngleSharp;
+using AngleSharp.Dom;
+using CarteScolaire.Data.Responses;
+using CarteScolaire.Data.Services;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+
+namespace CarteScolaire.DataImpl.Services.HtmlParsers;
+
+internal sealed class StudentInfoHtmlParser(
+    IBrowsingContext browsingContext,
+    IOptions<SelectorOptions> options,
+    ILogger<StudentInfoHtmlParser> logger) : IHtmlParser<StudentInfoResponse>
+{
+    private readonly SelectorOptions _selectorOptions = options.Value;
+    private static readonly string[] DateFormats = ["yyyy-MM-dd", "MM/dd/yyyy"];
+
+    public async Task<Result<StudentInfoCollection>> ParseAsync(Stream stream, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        Stopwatch sw = Stopwatch.StartNew();
+
+        try
+        {
+            using IDocument document = await browsingContext
+                .OpenAsync(r => r.Content(stream), cancellationToken)
+                .ConfigureAwait(false);
+                    
+            IHtmlCollection<IElement> elements = document.QuerySelectorAll(_selectorOptions.ResultSelector);
+            
+            Result<StudentInfoCollection> result = elements.Length is 0
+                ? Result<StudentInfoCollection>.Failure("No matching items found")
+                : elements.Select(ParseElement).ToArray();
+
+            return result
+                .OnSuccess(items => logger.LogDebug("{Count} HTML element(s) parsed successfully in {@Time}", items.Count, sw.Elapsed))
+                .OnFailure(error => logger.LogError("Failed to parse HTML stream. Reason: {Reason}.", error));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to parse HTML stream.");
+            return Result<StudentInfoCollection>.Failure($"Parsing failed: {ex.Message}");
+        }
+        finally
+        {
+            sw.Stop();
+        }
+    }
+
+    /// <summary>
+    /// Helper to safely get and trim text content from a node.
+    /// </summary>
+    private static string? GetCleanText(IElement node, string selector)
+    {
+        string? text = node.QuerySelector(selector)?.TextContent?.Trim();
+        return string.IsNullOrEmpty(text) ? null : text;
+    }
+
+    private StudentInfoResponse ParseElement(IElement node)
+    {
+        string registrationId = GetCleanText(node, _selectorOptions.RegistrationIdSelector) ?? "N/A";
+        string studentName = GetCleanText(node, _selectorOptions.NameSelector) ?? "N/A";
+        string schoolName = GetCleanText(node, _selectorOptions.SchoolNameSelector) ?? "N/A";
+        string studentClass = GetCleanText(node, _selectorOptions.GradeSelector) ?? "N/A";
+        string? dateOfBirthText = GetCleanText(node, _selectorOptions.DateOfBirthSelector);
+        string? genderText = GetCleanText(node, _selectorOptions.GenderSelector);
+        Gender gender = genderText?.ToUpperInvariant() switch
+        {
+            "M" => Gender.Male,
+            "F" => Gender.Female,
+            _ => Gender.Unspecified
+        };
+
+        DateOnly? dob = dateOfBirthText is not null
+            && DateOnly.TryParseExact(dateOfBirthText, DateFormats, CultureInfo.CurrentCulture, DateTimeStyles.None, out DateOnly parsed)
+            ? parsed
+            : null;
+
+        return new StudentInfoResponse
+        {
+            RegistrationId = registrationId,
+            Class = studentClass,
+            Name = studentName,
+            SchoolName = schoolName,
+            DateOfBirth = dob,
+            Gender = gender,
+        };
+    }
+}
+
+// -----------------------------
+// StudentInfoService.cs
+using System.Collections.Specialized;
+using System.Web;
+using CarteScolaire.Data.Queries;
+using CarteScolaire.Data.Responses;
+using CarteScolaire.Data.Services;
+using CarteScolaire.DataImpl.FuzzySearch;
+using CarteScolaire.DataImpl.Helpers;
+
+namespace CarteScolaire.DataImpl.Services;
+
+internal sealed class StudentInfoService(HttpClient httpClient, IHtmlParser<StudentInfoResponse> htmlParser) : IStudentInfoService
+{
+    public async Task<Result<StudentInfoCollection>> GetStudentInfoAsync(SearchQuery query, CancellationToken cancellationToken = default)
+    {
+        if (httpClient.BaseAddress is null)
+            return Result<StudentInfoCollection>.Failure("Invalid HTTP request: missing Base Address.");
+
+        return await ResultExtensions.TryAsync(
+            async () =>
+            {
+                NameValueCollection parts = HttpUtility.ParseQueryString(string.Empty);
+                parts["student_name"] = query.Name;
+                parts["school_code"] = query.SchoolId;
+
+                UriBuilder uriBuilder = new(httpClient.BaseAddress)
+                {
+                    Query = parts.ToString() ?? string.Empty
+                };
+
+                using HttpResponseMessage response = await httpClient
+                        .GetAsync(uriBuilder.Uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                        .ConfigureAwait(false);
+
+                if (!response.IsSuccessStatusCode)
+                    return Result<StudentInfoCollection>.Failure($"Failed to retrieve data : {response.ReasonPhrase}");
+
+                await using Stream stream = await response.Content
+                    .ReadAsStreamAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                Result<StudentInfoCollection> parseResult = await htmlParser
+                    .ParseAsync(stream, cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (parseResult.IsFailure || parseResult.Value.Count == 0)
+                {
+                    return Result<StudentInfoCollection>.Failure("No student information found for the given query parameters.");
+                }
+
+                return PerformFuzzySearch(parseResult.Value, query).ToResult(string.Empty);
+            }
+        );
+    }
+
+    private static StudentInfoCollection PerformFuzzySearch(in StudentInfoCollection items, SearchQuery query)
+    {
+        using FuzzySearchService<StudentInfoResponse> service = new();
+        service.Build(items);
+
+        return service
+                .Search(query)
+                .OrderByDescending(x => x.Score)
+                .Select(x => x.Item)
+                .ToList();
+    }
+}
+
+// -----------------------------
+// TokenProvider.cs
+using System.Diagnostics;
+using AngleSharp;
+using AngleSharp.Dom;
+using CarteScolaire.Data.Responses;
+using CarteScolaire.Data.Services;
+using CarteScolaire.DataImpl.Helpers;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+
+namespace CarteScolaire.DataImpl.Services.TokenProviders;
+
+internal sealed class TokenProvider(
+    HttpClient httpClient,
+    IBrowsingContext browsingContext,
+    IOptions<TokenProviderOptions> options,
+    ILogger<TokenProvider> logger) : ITokenProvider<string>
+{
+    private readonly TokenProviderOptions _options = options.Value;
+
+    public async Task<string> GetTokenAsync(CancellationToken cancellationToken = default)
+    {
+        if (httpClient.BaseAddress is null)
+        {
+            logger.LogWarning("BaseAddress is not set on the HttpClient.");
+            throw new UriFormatException("BaseAddress is not set on the HttpClient.");
+        }
+
+        return await GetTokenThenParseAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<string> GetTokenThenParseAsync(CancellationToken cancellationToken)
+    {
+        logger.LogInformation("Initiating fetch for CSRF token from {BaseAddress} at {Path}", httpClient.BaseAddress, _options.TokenEndpointPath);
+
+        Stopwatch sw = Stopwatch.StartNew();
+
+        using HttpResponseMessage response = await httpClient
+            .GetAsync(new Uri(_options.TokenEndpointPath, UriKind.Relative), HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+            .ConfigureAwait(false);
+
+        response.EnsureSuccessStatusCode();
+
+        Stream stream = await response.Content
+               .ReadAsStreamAsync(cancellationToken)
+               .ConfigureAwait(false);
+
+        using IDocument document = await
+            browsingContext
+                .OpenAsync(req => req.Content(stream, shouldDispose: true), cancellationToken)
+                .ConfigureAwait(false);
+
+        logger.LogDebug("HTML document parsed successfully in {@ParseTime}", sw.Elapsed);
+
+        Result<string> parseResult = document
+            .QuerySelector(_options.TokenSelector)
+            .ToResult($"CSRF token element not found. Selector: {_options.TokenSelector}")
+            .Bind(element => element.GetAttribute("value").ToResult("CSRF token element found but value is missing"))
+            .Ensure(token => !string.IsNullOrWhiteSpace(token), "CSRF token element found but value is empty");
+
+        sw.Stop();
+
+        if (parseResult.IsSuccess)
+        {
+            logger.LogInformation(
+                "CSRF token successfully extracted from {BaseAddress} in {@TotalTime}. Prefix: {TokenPrefix}, Length: {TokenLength}",
+                httpClient.BaseAddress,
+                sw.Elapsed,
+                parseResult.Value.Length >= 6 ? $"{parseResult.Value[..6]}..." : "## REDACTED ##",
+                parseResult.Value.Length);
+
+            return parseResult.Value;
+        }
+
+        logger.LogWarning("{ErrorMessage} - Elapsed: {@Time}", parseResult.Error, sw.Elapsed);
+        throw new InvalidOperationException(parseResult.Error);
+    }
+}
+
+// -----------------------------
+// TokenProviderOptions.cs
+namespace CarteScolaire.DataImpl.Services.TokenProviders;
+
+using System.ComponentModel.DataAnnotations;
+
+/// <summary>
+/// Configuration options for the TokenProvider service, specifying the endpoint 
+/// and CSS selector used for CSRF token extraction.
+/// </summary>
+public class TokenProviderOptions
+{
+    /// <summary>
+    /// Configuration section name used for binding, typically the name of this class.
+    /// </summary>
+    public const string SectionName = nameof(TokenProviderOptions);
+
+    /// <summary>
+    /// Gets or sets the relative path on the site to fetch for the token.
+    /// </summary>
+    /// <remarks>
+    /// This value must be non-empty (MinLength 1) and up to 50 characters long.
+    /// </remarks>
+    [Required, MinLength(1), MaxLength(50)]
+    public string TokenEndpointPath { get; set; } = null!;
+
+    /// <summary>
+    /// Gets or sets the CSS selector used to find the hidden input element containing the token.
+    /// </summary>
+    /// <remarks>
+    /// This value must be non-empty (MinLength 1) and up to 50 characters long.
+    /// </remarks>
+    [Required, MinLength(1), MaxLength(50)]
+    public string TokenSelector { get; set; } = null!;
+}
+// -----------------------------
+// GlobalUsings.cs
+global using StudentInfoCollection = System.Collections.ObjectModel.ReadOnlyCollection<CarteScolaire.Data.Responses.StudentInfoResponse>;
+
+// -----------------------------
+// .NETCoreApp,Version=v9.0.AssemblyAttributes.cs
+// <autogenerated />
+using System;
+using System.Reflection;
+[assembly: global::System.Runtime.Versioning.TargetFrameworkAttribute(".NETCoreApp,Version=v9.0", FrameworkDisplayName = ".NET 9.0")]
+
+// -----------------------------
+// CarteScolaire.Tests.Unit.GlobalUsings.g.cs
+// <auto-generated/>
+global using global::System;
+global using global::System.Collections.Generic;
+global using global::System.IO;
+global using global::System.Linq;
+global using global::System.Net.Http;
+global using global::System.Threading;
+global using global::System.Threading.Tasks;
+global using global::Xunit;
+
+// -----------------------------
+// .NETCoreApp,Version=v9.0.AssemblyAttributes.cs
+// <autogenerated />
+using System;
+using System.Reflection;
+[assembly: global::System.Runtime.Versioning.TargetFrameworkAttribute(".NETCoreApp,Version=v9.0", FrameworkDisplayName = ".NET 9.0")]
+
+// -----------------------------
+// CarteScolaire.Tests.Unit.AssemblyInfo.cs
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     Ce code a été généré par un outil.
+//     Version du runtime :4.0.30319.42000
+//
+//     Les modifications apportées à ce fichier peuvent provoquer un comportement incorrect et seront perdues si
+//     le code est régénéré.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: System.Reflection.AssemblyCompanyAttribute("CarteScolaire.Tests.Unit")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0c2138fe04f8a4b009e76761a08cea3ac4c47eb4")]
+[assembly: System.Reflection.AssemblyProductAttribute("CarteScolaire.Tests.Unit")]
+[assembly: System.Reflection.AssemblyTitleAttribute("CarteScolaire.Tests.Unit")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyMetadata("Microsoft.Testing.Platform.Application", "true")]
+
+// Généré par la classe MSBuild WriteCodeFragment.
+
+
+// -----------------------------
+// CarteScolaire.Tests.Unit.GlobalUsings.g.cs
+// <auto-generated/>
+global using global::System;
+global using global::System.Collections.Generic;
+global using global::System.IO;
+global using global::System.Linq;
+global using global::System.Net.Http;
+global using global::System.Threading;
+global using global::System.Threading.Tasks;
+global using global::Xunit;
+
+// -----------------------------
+// SelfRegisteredExtensions.cs
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     This code was generated by Microsoft.Testing.Platform.MSBuild
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+namespace CarteScolaire.Tests.Unit
+{
+    [global::System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+    internal static class SelfRegisteredExtensions
+    {
+        public static void AddSelfRegisteredExtensions(this global::Microsoft.Testing.Platform.Builder.ITestApplicationBuilder builder, string[] args)
+        {
+            global::Microsoft.Testing.Platform.MSBuild.TestingPlatformBuilderHook.AddExtensions(builder, args);
+        global::Microsoft.Testing.Extensions.Telemetry.TestingPlatformBuilderHook.AddExtensions(builder, args);
+        }
+    }
+}
+// -----------------------------
+// XunitAutoGeneratedEntryPoint.cs
+// <auto-generated> This file has been auto generated by xunit.v3.msbuildtasks. </auto-generated>
+
+namespace CarteScolaire.Tests.Unit.AutoGenerated
+{
+	[global::System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+	internal class XunitAutoGeneratedEntryPoint
+	{
+		public static int Main(string[] args)
+		{
+			if (global::System.Linq.Enumerable.Any(args, arg => arg == "--server" || arg == "--internal-msbuild-node"))
+				return global::Xunit.MicrosoftTestingPlatform.TestPlatformTestFramework.RunAsync(args, SelfRegisteredExtensions.AddSelfRegisteredExtensions).GetAwaiter().GetResult();
+			else
+				return global::Xunit.Runner.InProc.SystemConsole.ConsoleRunner.Run(args).GetAwaiter().GetResult();
+		}
+	}
+}
+// -----------------------------
+// StudentInfoHtmlParserTests.cs
+using System.Text;
+using AngleSharp;
+using CarteScolaire.Data.Responses;
+using CarteScolaire.DataImpl.Services.HtmlParsers;
+using FluentAssertions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using NSubstitute;
+
+namespace CarteScolaire.Tests.Unit;
+
+public sealed class StudentInfoHtmlParserTests : IDisposable
+{
+    private readonly IBrowsingContext _browsingContext = BrowsingContext.New(Configuration.Default.WithDefaultLoader());
+    private readonly ILogger<StudentInfoHtmlParser> _logger = Substitute.For<ILogger<StudentInfoHtmlParser>>();
+
+    private readonly SelectorOptions _options = new()
+    {
+        ResultSelector = ".student-row",
+        RegistrationIdSelector = ".reg-id",
+        NameSelector = ".name",
+        SchoolNameSelector = ".school",
+        GradeSelector = ".class",
+        DateOfBirthSelector = ".dob",
+        GenderSelector = ".gender"
+    };
+
+    public void Dispose()
+    {
+        _browsingContext.Dispose();
+    }
+
+    private StudentInfoHtmlParser CreateParser() => new(_browsingContext, Options.Create(_options), _logger);
+
+    private static MemoryStream HtmlStream(string html) => new(Encoding.UTF8.GetBytes(html));
+
+    [Fact]
+    public async Task ParseAsync_ShouldReturnMultipleRows_WhenAllDataIsPresent()
+    {
+        // Arrange
+        const string html =
+            """
+            <div class="student-row">
+                <span class="reg-id">2024001</span>
+                <span class="name">Jean Dupont</span>
+                <span class="school">Collège Victor Hugo</span>
+                <span class="class">6ème A</span>
+                <span class="dob">2012-03-15</span>
+                <span class="gender">M</span>
+            </div>
+            <div class="student-row">
+                <span class="reg-id">2024002</span>
+                <span class="name">Marie Curie</span>
+                <span class="school">Lycée Marie Curie</span>
+                <span class="class">Terminale S</span>
+                <span class="dob">03/22/2011</span>
+                <span class="gender">f</span>
+            </div>
+            """;
+
+        StudentInfoHtmlParser parser = CreateParser();
+
+        //Act
+        var result = await parser.ParseAsync(HtmlStream(html), TestContext.Current.CancellationToken);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        var collection = result.Value.ToList();
+        collection.Should().HaveCount(2);
+
+        var jean = collection[0];
+        jean.RegistrationId.Should().Be("2024001");
+        jean.Name.Should().Be("Jean Dupont");
+        jean.SchoolName.Should().Be("Collège Victor Hugo");
+        jean.Class.Should().Be("6ème A");
+        jean.DateOfBirth.Should().Be(new DateOnly(2012, 3, 15));
+        jean.Gender.Should().Be(Gender.Male);
+
+        var marie = collection[1];
+        marie.RegistrationId.Should().Be("2024002");
+        marie.Name.Should().Be("Marie Curie");
+        marie.Gender.Should().Be(Gender.Female);
+        marie.DateOfBirth.Should().Be(new DateOnly(2011, 3, 22));
+    }
+
+    [Fact]
+    public async Task ParseAsync_ShouldUseFallbackValues_WhenSomeFieldsAreMissing()
+    {
+        const string html =
+            """
+            <div class="student-row">
+                <span class="reg-id">999</span>
+                <span class="name">Alice</span>
+                <!-- school, class, dob, gender missing -->
+            </div>
+            """;
+
+        StudentInfoHtmlParser parser = CreateParser();
+        var result = await parser.ParseAsync(HtmlStream(html), TestContext.Current.CancellationToken);
+
+        result.IsSuccess.Should().BeTrue();
+        var student = result.Value.Single();
+
+        student.RegistrationId.Should().Be("999");
+        student.Name.Should().Be("Alice");
+        student.SchoolName.Should().Be("N/A");
+        student.Class.Should().Be("N/A");
+        student.DateOfBirth.Should().BeNull();
+        student.Gender.Should().Be(Gender.Unspecified);
+    }
+
+    [Fact]
+    public async Task ParseAsync_ShouldReturnFailure_WhenNoRowsMatchSelector()
+    {
+        const string html = "<div>No students here</div>";
+        StudentInfoHtmlParser parser = CreateParser();
+
+        var result = await parser.ParseAsync(HtmlStream(html), TestContext.Current.CancellationToken);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be("No matching items found");
+    }
+
+    [Fact]
+    public async Task ParseAsync_ShouldReturnFailure_WhenHtmlIsInvalid_AndLogException()
+    {
+        // Malformed HTML stream (truncated)
+        byte[] invalidBytes = """<html><body><div class="student-row">"""u8.ToArray()[..^5];
+        MemoryStream stream = new(invalidBytes);
+        StudentInfoHtmlParser parser = CreateParser();
+
+        var result = await parser.ParseAsync(stream, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().StartWith("No matching items found");
+
+        _logger.Received(1).Log(
+            LogLevel.Error,
+            Arg.Any<EventId>(),
+            Arg.Any<object>(),
+            Arg.Any<Exception>(),
+            Arg.Any<Func<object, Exception?, string>>());
+    }
+
+    [Fact]
+    public async Task ParseAsync_ShouldParseGender_CaseInsensitively_AndHandleUnexpectedValues()
+    {
+        const string html =
+            """
+            <div class="student-row"><span class="gender">M</span></div>
+            <div class="student-row"><span class="gender">f</span></div>
+            <div class="student-row"><span class="gender">male</span></div>
+            <div class="student-row"><span class="gender"></span></div>
+            """;
+
+        StudentInfoHtmlParser parser = CreateParser();
+        var result = await parser.ParseAsync(HtmlStream(html), TestContext.Current.CancellationToken);
+
+        result.IsSuccess.Should().BeTrue();
+        var genders = result.Value.Select(x => x.Gender).ToArray();
+
+        genders.Should().BeEquivalentTo(
+        [
+            Gender.Male,
+            Gender.Female,
+            Gender.Unspecified,
+            Gender.Unspecified
+        ]);
+    }
+
+    [Fact]
+    public async Task ParseAsync_ShouldSupportMultipleDateFormats_IncludingCurrentCulture()
+    {
+        const string html =
+            """
+            <div class="student-row"><span class="dob">2023-12-01</span></div>
+            <div class="student-row"><span class="dob">12/25/2022</span></div>
+            """;
+
+        StudentInfoHtmlParser parser = CreateParser();
+        var result = await parser.ParseAsync(HtmlStream(html), TestContext.Current.CancellationToken);
+
+        result.IsSuccess.Should().BeTrue();
+        var dates = result.Value.Select(x => x.DateOfBirth).ToArray();
+
+        dates.Should().BeEquivalentTo(new DateOnly?[]
+        {
+            new DateOnly(2023, 12, 1),
+            new DateOnly(2022, 12, 25)
+        });
+    }
+
+    [Fact]
+    public async Task ParseAsync_ShouldLogDebugOnSuccess_AndErrorOnFailure()
+    {
+        // Success case
+        const string html = """<div class="student-row"><span class="name">Test</span></div>""";
+        StudentInfoHtmlParser parser = CreateParser();
+        await parser.ParseAsync(HtmlStream(html), TestContext.Current.CancellationToken);
+
+        _logger.Received(1).Log(
+            LogLevel.Debug,
+            Arg.Any<EventId>(),
+            Arg.Is<object>(o => o.ToString()!.Contains("1 HTML element(s) parsed successfully")),
+            null,
+            Arg.Any<Func<object, Exception?, string>>());
+
+        _logger.ClearReceivedCalls();
+
+        // Failure case
+        const string badHtml = "<invalid>";
+        await parser.ParseAsync(HtmlStream(badHtml), TestContext.Current.CancellationToken);
+
+        _logger.Received(1).Log(
+            LogLevel.Error,
+            Arg.Any<EventId>(),
+            Arg.Any<object>(),
+            Arg.Any<Exception>(),
+            Arg.Any<Func<object, Exception?, string>>());
+    }
+}
+// -----------------------------
+// StudentInfoServiceTests.cs
+using System.Net;
+using CarteScolaire.Data.Queries;
+using CarteScolaire.Data.Responses;
+using CarteScolaire.Data.Services;
+using CarteScolaire.DataImpl.Services;
+using FluentAssertions;
+using NSubstitute;
+
+namespace CarteScolaire.Tests.Unit;
+
+public sealed class StudentInfoServiceTests
+{
+    private readonly IHtmlParser<StudentInfoResponse> _htmlParser;
+    private readonly StudentInfoService _sut;
+
+    // This field allows us to swap behavior per test without re-creating the Service
+    private Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> _handlerOverride;
+
+    //default request object
+    private readonly SearchQuery _query = new()
+    {
+        SchoolId = "1234",
+        Name = "DUPONT"
+    };
+
+    public StudentInfoServiceTests()
+    {
+        // Default behavior: throw to ensure tests explicitly set up their expectations
+        _handlerOverride = (_, _) => throw new NotImplementedException("Handler not configured for this test.");
+
+        // Wire up the client to use our mutable delegate
+        using TestHttpMessageHandler handler = new((req, token) => _handlerOverride(req, token));
+
+        using HttpClient httpClient = new(handler);
+        httpClient.BaseAddress = new Uri("https://api.cartescolaire.test/");
+
+        _htmlParser = Substitute.For<IHtmlParser<StudentInfoResponse>>();
+        _sut = new StudentInfoService(httpClient, _htmlParser);
+    }
+
+    [Fact]
+    public async Task GetStudentInfoAsync_ShouldReturnFailure_WhenBaseAddressIsNull()
+    {
+        // Arrange
+        using HttpClient clientNoBase = new();
+        StudentInfoService sut = new(clientNoBase, _htmlParser);
+
+        // Act
+        var result = await sut.GetStudentInfoAsync(_query, TestContext.Current.CancellationToken);
+
+        // Assert
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("missing Base Address");
+    }
+
+    [Fact]
+    public async Task GetStudentInfoAsync_ShouldBuildCorrectUri_AndReturnParsedResult_WhenHttpCallSucceeds()
+    {
+        // Arrange
+        StudentInfoCollection expectedResponse = new([
+                new StudentInfoResponse{ Class = "C1", Name = "DUPONT", Gender = Gender.Male, RegistrationId = "R134", SchoolName = "S1"},
+                new StudentInfoResponse{ Class = "C1", Name = "DUPONT 2", Gender = Gender.Male, RegistrationId = "R234", SchoolName = "S1"}]
+        );
+
+        // Setup Parser
+        _htmlParser
+            .ParseAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>())
+            .Returns(Result<IReadOnlyCollection<StudentInfoResponse>>.Success(expectedResponse));
+
+        // Setup HTTP: Capture the request to assert on it later
+        HttpRequestMessage? capturedRequest = null;
+
+        _handlerOverride = (req, _) =>
+        {
+            capturedRequest = req;
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("<html>Mock Content</html>")
+            });
+        };
+
+        // Act
+        var result = await _sut.GetStudentInfoAsync(_query, TestContext.Current.CancellationToken);
+
+        // Assert
+        // 1. Validate Result
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeSameAs(expectedResponse);
+
+        // 2. Validate Request
+        capturedRequest.Should().NotBeNull();
+        capturedRequest.Method.Should().Be(HttpMethod.Get);
+        capturedRequest.RequestUri!.Query.Should().Contain("student_name=DUPONT");
+        capturedRequest.RequestUri!.Query.Should().Contain("school_code=1234");
+    }
+
+    [Fact]
+    public async Task GetStudentInfoAsync_ShouldReturnFailure_WhenHttpResponseIsNotSuccess()
+    {
+        // Arrange
+        _handlerOverride = (_, _) => Task.FromResult(new HttpResponseMessage
+        {
+            StatusCode = HttpStatusCode.InternalServerError,
+            ReasonPhrase = "Server on fire"
+        });
+
+        // Act
+        var result = await _sut.GetStudentInfoAsync(_query, TestContext.Current.CancellationToken);
+
+        // Assert
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("Failed to retrieve data");
+        result.Error.Should().Contain("Server on fire");
+    }
+
+    [Fact]
+    public async Task GetStudentInfoAsync_ShouldReturnFailure_WhenExceptionIsThrown()
+    {
+        // Arrange : Simulate network failure
+        _handlerOverride = (_, _) => throw new HttpRequestException("Network error");
+
+        // Act
+        var result = await _sut.GetStudentInfoAsync(_query, TestContext.Current.CancellationToken);
+
+        // Assert
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("Network error");
+    }
+}
+// -----------------------------
+// TestHttpMessageHandler.cs
+using System.Diagnostics.CodeAnalysis;
+
+namespace CarteScolaire.Tests.Unit;
+
+[ExcludeFromCodeCoverage]
+internal sealed class TestHttpMessageHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler) : HttpMessageHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        => handler(request, cancellationToken);
+}
+
+
+// -----------------------------
+// TokenAppendingHandlerTests.cs
+using System.Net;
+using System.Text;
+using CarteScolaire.Data.Services;
+using CarteScolaire.DataImpl.Handlers;
+using FluentAssertions;
+using Microsoft.Extensions.Logging;
+using NSubstitute;
+using NSubstitute.ExceptionExtensions;
+using ZiggyCreatures.Caching.Fusion;
+
+namespace CarteScolaire.Tests.Unit;
+
+public sealed class TokenAppendingHandlerTests : IDisposable
+{
+    private readonly FusionCache _cache = new(new FusionCacheOptions());
+    private readonly ITokenProvider<string> _tokenProvider = Substitute.For<ITokenProvider<string>>();
+    private readonly ILogger<TokenAppendingHandler> _logger = Substitute.For<ILogger<TokenAppendingHandler>>();
+
+    public void Dispose()
+    {
+        _cache.Dispose();
+    }
+
+    private TokenAppendingHandler CreateSut(HttpMessageHandler? innerHandler = null)
+    {
+        innerHandler ??= new TestHttpMessageHandler((_, _) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("OK", Encoding.UTF8, "text/plain")
+            })
+        );
+
+        return new TokenAppendingHandler(_tokenProvider, _cache, _logger)
+        {
+            InnerHandler = innerHandler
+        };
+    }
+
+    [Fact]
+    public async Task SendAsync_ShouldReturnError_WhenRequestUriIsNull()
+    {
+        using TokenAppendingHandler handler = CreateSut();
+        using HttpMessageInvoker invoker = new(handler);
+        using HttpRequestMessage request = new(HttpMethod.Get, (Uri?)null);
+
+        using HttpResponseMessage response = await invoker.SendAsync(request, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.InternalServerError);
+        response.ReasonPhrase.Should().Contain("Invalid request: missing Request Uri.");
+        string content = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        content.Should().Contain("Invalid request: missing Request Uri.");
+    }
+
+    [Fact]
+    public async Task SendAsync_ShouldReturnError_WhenTokenProviderFails()
+    {
+        _tokenProvider.GetTokenAsync(Arg.Any<CancellationToken>()).Throws<InvalidOperationException>();
+        using TokenAppendingHandler handler = CreateSut();
+        using HttpMessageInvoker invoker = new(handler);
+        using HttpRequestMessage request = new(HttpMethod.Get, new Uri("https://test.example.com/api"));
+
+        using HttpResponseMessage response = await invoker.SendAsync(request, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.InternalServerError);
+    }
+
+    [Fact]
+    public async Task SendAsync_ShouldAppendTokenAndCallInnerHandler_WhenTokenIsValid()
+    {
+        const string token = "valid-csrf-token-value";
+        await _cache.SetAsync("csrf-token", token, token: TestContext.Current.CancellationToken);
+        using TokenAppendingHandler handler = CreateSut();
+        using HttpMessageInvoker invoker = new(handler);
+        using HttpRequestMessage request = new(HttpMethod.Get, new Uri("https://test.example.com/api?foo=bar"));
+
+        using HttpResponseMessage response = await invoker.SendAsync(request, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        string content = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        content.Should().Be("OK");
+
+        // Vérifier que le token est bien ajouté à l'URL
+        request.RequestUri!.OriginalString.Should().Contain($"_token={token}");
+        request.RequestUri!.Query.Should().Contain("foo=bar");
+        request.RequestUri!.Query.Should().Contain("_token=");
+    }
+
+    [Fact]
+    public async Task SendAsync_ShouldFetchAndCacheToken_WhenCacheIsEmpty()
+    {
+        const string freshToken = "fresh-token-789";
+        _tokenProvider.GetTokenAsync(Arg.Any<CancellationToken>()).Returns(freshToken);
+
+        using TokenAppendingHandler handler = CreateSut();
+        using HttpMessageInvoker invoker = new(handler);
+        using HttpRequestMessage request = new(HttpMethod.Get, new Uri("https://api.test/api"));
+
+        using HttpResponseMessage response = await invoker.SendAsync(request, CancellationToken.None);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        request.RequestUri!.Query.Should().Contain($"_token={freshToken}");
+
+        // Verify it was cached
+        string? cached = await _cache.GetOrDefaultAsync<string>("csrf-token", token: TestContext.Current.CancellationToken);
+        cached.Should().Be(freshToken);
+
+        // Second call should not hit tokenProvider again
+        _tokenProvider.ClearReceivedCalls();
+        await invoker.SendAsync(request, CancellationToken.None);
+        await _tokenProvider.DidNotReceive().GetTokenAsync(TestContext.Current.CancellationToken);
+    }
+}
+
+// -----------------------------
+// TokenProviderTests.cs
+using System.Net;
+using System.Text;
+using AngleSharp;
+using CarteScolaire.DataImpl.Services.TokenProviders;
+using FluentAssertions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using NSubstitute;
+
+namespace CarteScolaire.Tests.Unit;
+
+public sealed class TokenProviderTests : IDisposable
+{
+    private readonly TokenProviderOptions _options = new()
+    {
+        TokenEndpointPath = "/token",
+        TokenSelector = "#csrf"
+    };
+
+    private readonly IBrowsingContext _browsingContext = BrowsingContext.New(Configuration.Default.WithDefaultLoader());
+    private readonly ILogger<TokenProvider> _logger = Substitute.For<ILogger<TokenProvider>>();
+
+    public void Dispose()
+    {
+        _browsingContext.Dispose();
+    }
+
+
+    private TokenProvider CreateSut(HttpClient httpClient)
+        => new(httpClient, _browsingContext, Options.Create(_options), _logger);
+
+
+    private static HttpClient HttpClientFromHtml(string html, HttpStatusCode statusCode = HttpStatusCode.OK)
+    {
+        using TestHttpMessageHandler handler = new((_, _) =>
+             Task.FromResult(new HttpResponseMessage(statusCode)
+             {
+                 Content = new StringContent(html, Encoding.UTF8, "text/html")
+             }));
+
+        return new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://test.example.com")
+        };
+    }
+
+    private static HttpClient HttpClientWithException(Exception exception)
+    {
+        using TestHttpMessageHandler handler = new((_, _) => Task.FromException<HttpResponseMessage>(exception));
+
+        return new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://test.example.com")
+        };
+    }
+
+    [Fact]
+    public async Task GetTokenAsync_ShouldThrow_WhenBaseAddressIsNull()
+    {
+        using HttpClient httpClient = new();
+        httpClient.BaseAddress = null!;
+        TokenProvider provider = CreateSut(httpClient);
+
+        await provider
+            .Invoking(p => p.GetTokenAsync(TestContext.Current.CancellationToken))
+            .Should().ThrowAsync<UriFormatException>()
+            .WithMessage("*BaseAddress is not set on the HttpClient*");
+
+        _logger.Received(1).Log(
+            LogLevel.Warning,
+            Arg.Any<EventId>(),
+            Arg.Is<object>(o => o.ToString()!.Contains("BaseAddress is not set on the HttpClient")),
+            null,
+            Arg.Any<Func<object, Exception?, string>>());
+    }
+
+    [Fact]
+    public async Task GetTokenAsync_ShouldReturnSuccess_WhenTokenIsExtracted()
+    {
+        const string token = "abc123xyz";
+        const string html =
+            $"""
+                <!DOCTYPE html>
+                <html><body>
+                    <input id="csrf" value="{token}" />
+                </body></html>
+              """;
+
+        using HttpClient httpClient = HttpClientFromHtml(html);
+        TokenProvider provider = CreateSut(httpClient);
+
+        string result = await provider.GetTokenAsync(TestContext.Current.CancellationToken);
+
+        result.Should().Be(token);
+    }
+
+    [Fact]
+    public async Task GetTokenAsync_ShouldThrow_WhenHttpResponseIsNotSuccess()
+    {
+        using HttpClient httpClient = HttpClientFromHtml("", HttpStatusCode.BadRequest);
+        TokenProvider provider = CreateSut(httpClient);
+
+        await provider
+            .Invoking(p => p.GetTokenAsync(TestContext.Current.CancellationToken))
+            .Should().ThrowAsync<HttpRequestException>()
+            .WithMessage("*400 (Bad Request)*");
+    }
+
+    [Fact]
+    public async Task GetTokenAsync_ShouldThrow_WhenTokenElementNotFound()
+    {
+        const string html = "<!DOCTYPE html><html><body>No token here</body></html>";
+        using HttpClient httpClient = HttpClientFromHtml(html);
+        TokenProvider provider = CreateSut(httpClient);
+
+        await provider
+            .Invoking(p => p.GetTokenAsync(TestContext.Current.CancellationToken))
+            .Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("CSRF token element not found. Selector: #csrf");
+    }
+
+    [Fact]
+    public async Task GetTokenAsync_ShouldThrow_WhenHttpRequestExceptionOccurs()
+    {
+        using HttpClient httpClient = HttpClientWithException(new HttpRequestException("Network failure"));
+        TokenProvider provider = CreateSut(httpClient);
+
+        await provider
+            .Invoking(p => p.GetTokenAsync(TestContext.Current.CancellationToken))
+            .Should().ThrowAsync<HttpRequestException>()
+            .WithMessage("*Network failure*");
+    }
+
+    [Fact]
+    public async Task GetTokenAsync_ShouldThrow_WhenOperationCanceledExceptionOccurs()
+    {
+        using HttpClient httpClient = HttpClientWithException(new OperationCanceledException("Operation canceled"));
+        TokenProvider provider = CreateSut(httpClient);
+
+        await provider
+            .Invoking(p => p.GetTokenAsync(TestContext.Current.CancellationToken))
+            .Should().ThrowAsync<OperationCanceledException>()
+            .WithMessage("*Operation canceled*");
+    }
+}
+
+// -----------------------------
+// .NETCoreApp,Version=v9.0.AssemblyAttributes.cs
+// <autogenerated />
+using System;
+using System.Reflection;
+[assembly: global::System.Runtime.Versioning.TargetFrameworkAttribute(".NETCoreApp,Version=v9.0", FrameworkDisplayName = ".NET 9.0")]
+
+// -----------------------------
+// CarteScolaire.GlobalUsings.g.cs
+// <auto-generated/>
+global using global::System;
+global using global::System.Collections.Generic;
+global using global::System.IO;
+global using global::System.Linq;
+global using global::System.Net.Http;
+global using global::System.Threading;
+global using global::System.Threading.Tasks;
+
+// -----------------------------
+// Program.cs
+using System.Globalization;
+using CarteScolaire.Data.Queries;
+using CarteScolaire.Data.Responses;
+using CarteScolaire.Data.Services;
+using CarteScolaire.DataImpl;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Serilog;
+
+IHost host = Host
+    .CreateDefaultBuilder(args)
+    .UseDefaultServiceProvider((_, configure) =>
+    {
+        configure.ValidateScopes = true;
+        configure.ValidateOnBuild = true;
+    })
+    .UseSerilog((_, config) =>
+    {
+        config.Enrich.FromLogContext()
+              .WriteTo.Console(formatProvider: CultureInfo.CurrentCulture)
+              .MinimumLevel.Information();
+    })
+    .ConfigureServices((_, services) =>
+    {
+        services.RegisterImplementations();
+    })
+    .Build();
+
+using CancellationTokenSource tokenSource = new();
+
+Console.CancelKeyPress += (_, eventArgs) =>
+{
+    // Prevent the application from immediately terminating
+    eventArgs.Cancel = true;
+
+    Console.WriteLine("[Cancellation Requested: Ctrl+C pressed]");
+    // ReSharper disable once AccessToDisposedClosure
+    tokenSource.Cancel();
+};
+
+Console.WriteLine("Press Ctrl+C to cancel the operation.");
+
+try
+{
+    IStudentInfoService studentService = host.Services.GetRequiredService<IStudentInfoService>();
+
+    SearchQuery query = new()
+    {
+        SchoolId = "OU50130I12",
+        Name = "nsangou",
+        Gender = Gender.Female,
+        DateOfBirth = new DateOnly(2012, 2, 19),
+        DatePrecision = DatePrecision.Day,
+        Fuzziness = 0.7f,
+        MaxResults = 50
+    };
+
+    Result<IReadOnlyCollection<StudentInfoResponse>> result = await studentService
+            .GetStudentInfoAsync(query, tokenSource.Token)
+            .ConfigureAwait(false);
+
+    result.Match(
+        onSuccess: items =>
+        {
+            Console.WriteLine($"Students found matching the criteria: {items.Count}");
+            foreach (StudentInfoResponse item in items) Console.WriteLine(item);
+        },
+        onFailure: Console.WriteLine
+    );
+
+}
+catch (Exception ex)
+{
+    Console.WriteLine(ex.Message);
+}
+finally
+{
+    Console.WriteLine("Appuyez sur n'importe quelle touche pour quitter:");
+    Console.ReadKey();
+}
+

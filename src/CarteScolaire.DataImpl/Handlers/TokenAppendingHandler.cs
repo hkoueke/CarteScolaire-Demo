@@ -14,6 +14,7 @@ internal sealed class TokenAppendingHandler(
     ILogger<TokenAppendingHandler> logger) : DelegatingHandler
 {
     private const string CacheKey = "csrf-token";
+    private const string TokenQueryKey = "_token"; // Made constant for easy config change
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
@@ -25,33 +26,35 @@ internal sealed class TokenAppendingHandler(
 
         try
         {
-            var token = await cache.GetOrSetAsync(
+            string token = await cache.GetOrSetAsync(
                 CacheKey,
-                async ct => await tokenProvider.GetTokenAsync(ct),
+                async ct => await tokenProvider.GetTokenAsync(ct).ConfigureAwait(false),
                 options => options
                     .SetDuration(TimeSpan.FromHours(2))
                     .SetFailSafe(true)
                     .SetFactoryTimeouts(TimeSpan.FromSeconds(10))
                     .SetEagerRefresh(0.9f),
                 cancellationToken
-            );
+            ).ConfigureAwait(false);
 
-            return await AppendTokenAndSendAsync(request, token, cancellationToken);
+            return await AppendTokenAndSendAsync(request, token, cancellationToken).ConfigureAwait(false);
         }
+#pragma warning disable CA1031
         catch (Exception ex)
+#pragma warning restore CA1031
         {
-            logger.LogWarning("Failed to obtain CSRF token: {Error}", ex.Message);
+            logger.LogWarning(ex, "Failed to obtain CSRF token");
             return CreateTokenFailureResponse(ex.Message);
         }
     }
 
     private Task<HttpResponseMessage> AppendTokenAndSendAsync(HttpRequestMessage request, string token, CancellationToken cancellationToken)
     {
-        var uriBuilder = new UriBuilder(request.RequestUri!);
+        UriBuilder uriBuilder = new(request.RequestUri!);
         NameValueCollection parts = HttpUtility.ParseQueryString(uriBuilder.Query);
 
-        parts["_token"] = token;
-        uriBuilder.Query = parts.ToString();
+        parts[TokenQueryKey] = token;
+        uriBuilder.Query = parts.ToString() ?? string.Empty;
         request.RequestUri = uriBuilder.Uri;
 
         // Proceed with the modified request
@@ -60,7 +63,10 @@ internal sealed class TokenAppendingHandler(
 
     private static HttpResponseMessage CreateTokenFailureResponse(string? message)
     {
-        var text = message ?? "An unknown error occurred while retrieving the CSRF token.";
+        string text = string.IsNullOrEmpty(message)
+            ? "An unknown error occurred while retrieving the CSRF token."
+            : message;
+
         return new HttpResponseMessage(HttpStatusCode.InternalServerError)
         {
             ReasonPhrase = text,

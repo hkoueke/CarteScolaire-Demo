@@ -10,7 +10,7 @@ using ZiggyCreatures.Caching.Fusion;
 
 namespace CarteScolaire.Tests.Unit;
 
-public class TokenAppendingHandlerTests : IDisposable
+public sealed class TokenAppendingHandlerTests : IDisposable
 {
     private readonly FusionCache _cache = new(new FusionCacheOptions());
     private readonly ITokenProvider<string> _tokenProvider = Substitute.For<ITokenProvider<string>>();
@@ -19,7 +19,6 @@ public class TokenAppendingHandlerTests : IDisposable
     public void Dispose()
     {
         _cache.Dispose();
-        GC.SuppressFinalize(this);
     }
 
     private TokenAppendingHandler CreateSut(HttpMessageHandler? innerHandler = null)
@@ -40,15 +39,15 @@ public class TokenAppendingHandlerTests : IDisposable
     [Fact]
     public async Task SendAsync_ShouldReturnError_WhenRequestUriIsNull()
     {
-        var handler = CreateSut();
-        var invoker = new HttpMessageInvoker(handler);
-        var request = new HttpRequestMessage(HttpMethod.Get, (Uri?)null);
+        using TokenAppendingHandler handler = CreateSut();
+        using HttpMessageInvoker invoker = new(handler);
+        using HttpRequestMessage request = new(HttpMethod.Get, (Uri?)null);
 
-        using var response = await invoker.SendAsync(request, TestContext.Current.CancellationToken);
+        using HttpResponseMessage response = await invoker.SendAsync(request, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.InternalServerError);
         response.ReasonPhrase.Should().Contain("Invalid request: missing Request Uri.");
-        var content = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        string content = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         content.Should().Contain("Invalid request: missing Request Uri.");
     }
 
@@ -56,11 +55,11 @@ public class TokenAppendingHandlerTests : IDisposable
     public async Task SendAsync_ShouldReturnError_WhenTokenProviderFails()
     {
         _tokenProvider.GetTokenAsync(Arg.Any<CancellationToken>()).Throws<InvalidOperationException>();
-        var handler = CreateSut();
-        var invoker = new HttpMessageInvoker(handler);
-        var request = new HttpRequestMessage(HttpMethod.Get, new Uri("https://test.example.com/api"));
+        using TokenAppendingHandler handler = CreateSut();
+        using HttpMessageInvoker invoker = new(handler);
+        using HttpRequestMessage request = new(HttpMethod.Get, new Uri("https://test.example.com/api"));
 
-        using var response = await invoker.SendAsync(request, TestContext.Current.CancellationToken);
+        using HttpResponseMessage response = await invoker.SendAsync(request, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.InternalServerError);
     }
@@ -70,14 +69,14 @@ public class TokenAppendingHandlerTests : IDisposable
     {
         const string token = "valid-csrf-token-value";
         await _cache.SetAsync("csrf-token", token, token: TestContext.Current.CancellationToken);
-        var handler = CreateSut();
-        var invoker = new HttpMessageInvoker(handler);
-        var request = new HttpRequestMessage(HttpMethod.Get, new Uri("https://test.example.com/api?foo=bar"));
+        using TokenAppendingHandler handler = CreateSut();
+        using HttpMessageInvoker invoker = new(handler);
+        using HttpRequestMessage request = new(HttpMethod.Get, new Uri("https://test.example.com/api?foo=bar"));
 
-        using var response = await invoker.SendAsync(request, TestContext.Current.CancellationToken);
+        using HttpResponseMessage response = await invoker.SendAsync(request, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var content = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        string content = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         content.Should().Be("OK");
 
         // Vérifier que le token est bien ajouté à l'URL
@@ -92,17 +91,17 @@ public class TokenAppendingHandlerTests : IDisposable
         const string freshToken = "fresh-token-789";
         _tokenProvider.GetTokenAsync(Arg.Any<CancellationToken>()).Returns(freshToken);
 
-        var handler = CreateSut();
-        var invoker = new HttpMessageInvoker(handler);
-        var request = new HttpRequestMessage(HttpMethod.Get, new Uri("https://api.test/api"));
+        using TokenAppendingHandler handler = CreateSut();
+        using HttpMessageInvoker invoker = new(handler);
+        using HttpRequestMessage request = new(HttpMethod.Get, new Uri("https://api.test/api"));
 
-        using var response = await invoker.SendAsync(request, CancellationToken.None);
+        using HttpResponseMessage response = await invoker.SendAsync(request, CancellationToken.None);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         request.RequestUri!.Query.Should().Contain($"_token={freshToken}");
 
         // Verify it was cached
-        var cached = await _cache.GetOrDefaultAsync<string>("csrf-token", token: TestContext.Current.CancellationToken);
+        string? cached = await _cache.GetOrDefaultAsync<string>("csrf-token", token: TestContext.Current.CancellationToken);
         cached.Should().Be(freshToken);
 
         // Second call should not hit tokenProvider again

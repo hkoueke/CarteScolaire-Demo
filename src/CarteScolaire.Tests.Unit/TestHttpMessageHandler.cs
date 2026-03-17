@@ -1,6 +1,9 @@
-﻿namespace CarteScolaire.Tests.Unit;
+﻿using System.Diagnostics.CodeAnalysis;
 
-internal class TestHttpMessageHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler) : HttpMessageHandler
+namespace CarteScolaire.Tests.Unit;
+
+[ExcludeFromCodeCoverage]
+internal sealed class TestHttpMessageHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler) : HttpMessageHandler
 {
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         => handler(request, cancellationToken);

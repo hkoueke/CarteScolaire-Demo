@@ -1,4 +1,6 @@
-﻿namespace CarteScolaire.Data.Responses;
+﻿using CarteScolaire.Data.Queries;
+
+namespace CarteScolaire.Data.Responses;
 
 /// <summary>
 /// A class representing a response to a query about a student.
@@ -13,16 +15,19 @@ public readonly record struct StudentInfoResponse
     /// <summary>
     /// The full name of the student.
     /// </summary>
+    [SearchField(Boost = 3.0f)]
     public required string Name { get; init; }
 
     /// <summary>
     /// The student's date of birth. This can be null.
     /// </summary>
+    [SearchField(FieldType = SearchFieldType.Date, Boost = 2.0f)]
     public DateOnly? DateOfBirth { get; init; }
 
     /// <summary>
     /// The student's gender.
     /// </summary>
+    [SearchField(FieldType = SearchFieldType.Keyword, Boost = 2.0f)]
     public required Gender Gender { get; init; }
 
     /// <summary>

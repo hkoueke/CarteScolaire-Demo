@@ -9,7 +9,7 @@ using NSubstitute;
 
 namespace CarteScolaire.Tests.Unit;
 
-public class StudentInfoHtmlParserTests : IDisposable
+public sealed class StudentInfoHtmlParserTests : IDisposable
 {
     private readonly IBrowsingContext _browsingContext = BrowsingContext.New(Configuration.Default.WithDefaultLoader());
     private readonly ILogger<StudentInfoHtmlParser> _logger = Substitute.For<ILogger<StudentInfoHtmlParser>>();
@@ -28,7 +28,6 @@ public class StudentInfoHtmlParserTests : IDisposable
     public void Dispose()
     {
         _browsingContext.Dispose();
-        GC.SuppressFinalize(this);
     }
 
     private StudentInfoHtmlParser CreateParser() => new(_browsingContext, Options.Create(_options), _logger);
@@ -59,9 +58,9 @@ public class StudentInfoHtmlParserTests : IDisposable
             </div>
             """;
 
-        var parser = CreateParser();
+        StudentInfoHtmlParser parser = CreateParser();
 
-        // Act
+        //Act
         var result = await parser.ParseAsync(HtmlStream(html), TestContext.Current.CancellationToken);
 
         // Assert
@@ -96,7 +95,7 @@ public class StudentInfoHtmlParserTests : IDisposable
             </div>
             """;
 
-        var parser = CreateParser();
+        StudentInfoHtmlParser parser = CreateParser();
         var result = await parser.ParseAsync(HtmlStream(html), TestContext.Current.CancellationToken);
 
         result.IsSuccess.Should().BeTrue();
@@ -114,7 +113,7 @@ public class StudentInfoHtmlParserTests : IDisposable
     public async Task ParseAsync_ShouldReturnFailure_WhenNoRowsMatchSelector()
     {
         const string html = "<div>No students here</div>";
-        var parser = CreateParser();
+        StudentInfoHtmlParser parser = CreateParser();
 
         var result = await parser.ParseAsync(HtmlStream(html), TestContext.Current.CancellationToken);
 
@@ -126,9 +125,9 @@ public class StudentInfoHtmlParserTests : IDisposable
     public async Task ParseAsync_ShouldReturnFailure_WhenHtmlIsInvalid_AndLogException()
     {
         // Malformed HTML stream (truncated)
-        var invalidBytes = """<html><body><div class="student-row">"""u8.ToArray()[..^5];
-        var stream = new MemoryStream(invalidBytes);
-        var parser = CreateParser();
+        byte[] invalidBytes = """<html><body><div class="student-row">"""u8.ToArray()[..^5];
+        MemoryStream stream = new(invalidBytes);
+        StudentInfoHtmlParser parser = CreateParser();
 
         var result = await parser.ParseAsync(stream, CancellationToken.None);
 
@@ -154,7 +153,7 @@ public class StudentInfoHtmlParserTests : IDisposable
             <div class="student-row"><span class="gender"></span></div>
             """;
 
-        var parser = CreateParser();
+        StudentInfoHtmlParser parser = CreateParser();
         var result = await parser.ParseAsync(HtmlStream(html), TestContext.Current.CancellationToken);
 
         result.IsSuccess.Should().BeTrue();
@@ -178,7 +177,7 @@ public class StudentInfoHtmlParserTests : IDisposable
             <div class="student-row"><span class="dob">12/25/2022</span></div>
             """;
 
-        var parser = CreateParser();
+        StudentInfoHtmlParser parser = CreateParser();
         var result = await parser.ParseAsync(HtmlStream(html), TestContext.Current.CancellationToken);
 
         result.IsSuccess.Should().BeTrue();
@@ -196,13 +195,13 @@ public class StudentInfoHtmlParserTests : IDisposable
     {
         // Success case
         const string html = """<div class="student-row"><span class="name">Test</span></div>""";
-        var parser = CreateParser();
+        StudentInfoHtmlParser parser = CreateParser();
         await parser.ParseAsync(HtmlStream(html), TestContext.Current.CancellationToken);
 
         _logger.Received(1).Log(
             LogLevel.Debug,
             Arg.Any<EventId>(),
-            Arg.Is<object>(o => o.ToString()!.Contains("1 HTML elements parsed successfully")),
+            Arg.Is<object>(o => o.ToString()!.Contains("1 HTML element(s) parsed successfully")),
             null,
             Arg.Any<Func<object, Exception?, string>>());
 

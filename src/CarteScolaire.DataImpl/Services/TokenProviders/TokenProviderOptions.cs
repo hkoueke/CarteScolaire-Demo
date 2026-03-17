@@ -6,7 +6,7 @@ using System.ComponentModel.DataAnnotations;
 /// Configuration options for the TokenProvider service, specifying the endpoint 
 /// and CSS selector used for CSRF token extraction.
 /// </summary>
-public class TokenProviderOptions
+public sealed class TokenProviderOptions
 {
     /// <summary>
     /// Configuration section name used for binding, typically the name of this class.

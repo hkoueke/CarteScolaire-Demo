@@ -13,6 +13,7 @@
         "packagesPath": "C:\\Users\\wansi\\.nuget\\packages\\",
         "outputPath": "C:\\Users\\wansi\\source\\repos\\CarteScolaire-Demo\\src\\CarteScolaire.Data\\obj\\",
         "projectStyle": "PackageReference",
+        "centralPackageVersionsManagementEnabled": true,
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
@@ -35,6 +36,7 @@
           }
         },
         "warningProperties": {
+          "allWarningsAsErrors": true,
           "warnAsError": [
             "NU1605"
           ]
@@ -49,6 +51,37 @@
       "frameworks": {
         "net9.0": {
           "targetAlias": "net9.0",
+          "dependencies": {
+            "Microsoft.CodeAnalysis.NetAnalyzers": {
+              "include": "Runtime, Build, Native, ContentFiles, Analyzers, BuildTransitive",
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[10.0.103, )",
+              "versionCentrallyManaged": true
+            }
+          },
+          "centralPackageVersions": {
+            "AngleSharp": "1.4.0",
+            "FluentAssertions": "8.8.0",
+            "Lucene.Net": "4.8.0-beta00016",
+            "Lucene.Net.Analysis.Common": "4.8.0-beta00016",
+            "Lucene.Net.Highlighter": "4.8.0-beta00001",
+            "Lucene.Net.QueryParser": "4.8.0-beta00001",
+            "Microsoft.CodeAnalysis.NetAnalyzers": "10.0.103",
+            "Microsoft.Extensions.Hosting": "10.0.3",
+            "Microsoft.Extensions.Http": "10.0.3",
+            "Microsoft.Extensions.Http.Resilience": "10.3.0",
+            "Microsoft.Extensions.Options.DataAnnotations": "10.0.3",
+            "Microsoft.Extensions.Resilience": "10.3.0",
+            "Microsoft.NET.Test.Sdk": "18.3.0",
+            "NSubstitute": "5.3.0",
+            "Nuke.Common": "9.0.4",
+            "Serilog.Extensions.Hosting": "10.0.0",
+            "Serilog.Sinks.Console": "6.1.1",
+            "xunit.runner.visualstudio": "3.1.5",
+            "xunit.v3": "3.2.2",
+            "ZiggyCreatures.FusionCache": "2.5.0"
+          },
           "imports": [
             "net461",
             "net462",

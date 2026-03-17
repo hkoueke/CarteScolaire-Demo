@@ -9,7 +9,7 @@ using NSubstitute;
 
 namespace CarteScolaire.Tests.Unit;
 
-public class TokenProviderTests : IDisposable
+public sealed class TokenProviderTests : IDisposable
 {
     private readonly TokenProviderOptions _options = new()
     {
@@ -22,7 +22,6 @@ public class TokenProviderTests : IDisposable
 
     public void Dispose()
     {
-        GC.SuppressFinalize(this);
         _browsingContext.Dispose();
     }
 
@@ -33,11 +32,11 @@ public class TokenProviderTests : IDisposable
 
     private static HttpClient HttpClientFromHtml(string html, HttpStatusCode statusCode = HttpStatusCode.OK)
     {
-        var handler = new TestHttpMessageHandler((_, _) =>
-            Task.FromResult(new HttpResponseMessage(statusCode)
-            {
-                Content = new StringContent(html, Encoding.UTF8, "text/html")
-            }));
+        using TestHttpMessageHandler handler = new((_, _) =>
+             Task.FromResult(new HttpResponseMessage(statusCode)
+             {
+                 Content = new StringContent(html, Encoding.UTF8, "text/html")
+             }));
 
         return new HttpClient(handler)
         {
@@ -47,7 +46,7 @@ public class TokenProviderTests : IDisposable
 
     private static HttpClient HttpClientWithException(Exception exception)
     {
-        var handler = new TestHttpMessageHandler((_, _) => Task.FromException<HttpResponseMessage>(exception));
+        using TestHttpMessageHandler handler = new((_, _) => Task.FromException<HttpResponseMessage>(exception));
 
         return new HttpClient(handler)
         {
@@ -58,8 +57,9 @@ public class TokenProviderTests : IDisposable
     [Fact]
     public async Task GetTokenAsync_ShouldThrow_WhenBaseAddressIsNull()
     {
-        var httpClient = new HttpClient { BaseAddress = null! };
-        var provider = CreateSut(httpClient);
+        using HttpClient httpClient = new();
+        httpClient.BaseAddress = null!;
+        TokenProvider provider = CreateSut(httpClient);
 
         await provider
             .Invoking(p => p.GetTokenAsync(TestContext.Current.CancellationToken))
@@ -86,10 +86,10 @@ public class TokenProviderTests : IDisposable
                 </body></html>
               """;
 
-        using var httpClient = HttpClientFromHtml(html);
-        var provider = CreateSut(httpClient);
+        using HttpClient httpClient = HttpClientFromHtml(html);
+        TokenProvider provider = CreateSut(httpClient);
 
-        var result = await provider.GetTokenAsync(TestContext.Current.CancellationToken);
+        string result = await provider.GetTokenAsync(TestContext.Current.CancellationToken);
 
         result.Should().Be(token);
     }
@@ -97,8 +97,8 @@ public class TokenProviderTests : IDisposable
     [Fact]
     public async Task GetTokenAsync_ShouldThrow_WhenHttpResponseIsNotSuccess()
     {
-        using var httpClient = HttpClientFromHtml("", HttpStatusCode.BadRequest);
-        var provider = CreateSut(httpClient);
+        using HttpClient httpClient = HttpClientFromHtml("", HttpStatusCode.BadRequest);
+        TokenProvider provider = CreateSut(httpClient);
 
         await provider
             .Invoking(p => p.GetTokenAsync(TestContext.Current.CancellationToken))
@@ -110,8 +110,8 @@ public class TokenProviderTests : IDisposable
     public async Task GetTokenAsync_ShouldThrow_WhenTokenElementNotFound()
     {
         const string html = "<!DOCTYPE html><html><body>No token here</body></html>";
-        using var httpClient = HttpClientFromHtml(html);
-        var provider = CreateSut(httpClient);
+        using HttpClient httpClient = HttpClientFromHtml(html);
+        TokenProvider provider = CreateSut(httpClient);
 
         await provider
             .Invoking(p => p.GetTokenAsync(TestContext.Current.CancellationToken))
@@ -122,8 +122,8 @@ public class TokenProviderTests : IDisposable
     [Fact]
     public async Task GetTokenAsync_ShouldThrow_WhenHttpRequestExceptionOccurs()
     {
-        using var httpClient = HttpClientWithException(new HttpRequestException("Network failure"));
-        var provider = CreateSut(httpClient);
+        using HttpClient httpClient = HttpClientWithException(new HttpRequestException("Network failure"));
+        TokenProvider provider = CreateSut(httpClient);
 
         await provider
             .Invoking(p => p.GetTokenAsync(TestContext.Current.CancellationToken))
@@ -134,8 +134,8 @@ public class TokenProviderTests : IDisposable
     [Fact]
     public async Task GetTokenAsync_ShouldThrow_WhenOperationCanceledExceptionOccurs()
     {
-        using var httpClient = HttpClientWithException(new OperationCanceledException("Operation canceled"));
-        var provider = CreateSut(httpClient);
+        using HttpClient httpClient = HttpClientWithException(new OperationCanceledException("Operation canceled"));
+        TokenProvider provider = CreateSut(httpClient);
 
         await provider
             .Invoking(p => p.GetTokenAsync(TestContext.Current.CancellationToken))

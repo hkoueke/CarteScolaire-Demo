@@ -1,0 +1,29 @@
+<Project>
+	<PropertyGroup>
+		<TargetFramework>net9.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+		<AnalysisMode>All</AnalysisMode>
+		<EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+		<AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+		<Deterministic>true</Deterministic>
+		<Features>strict</Features>
+
+		<!-- Runtime performance -->
+		<ServerGarbageCollection>true</ServerGarbageCollection>
+		<GCConserveMemory>1</GCConserveMemory>
+		<GCHeapHardLimit>2147483648</GCHeapHardLimit>
+		<TieredPGO>true</TieredPGO>
+		<TieredCompilation>true</TieredCompilation>
+
+		<!-- Package metadata -->
+		<Authors>RVK</Authors>
+		<Company>RVK</Company>
+		<Version>1.0.0</Version>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" />
+	</ItemGroup>
+</Project>

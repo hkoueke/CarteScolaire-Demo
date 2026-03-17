@@ -1,11 +1,15 @@
 ﻿using System.Diagnostics;
 using AngleSharp;
+using AngleSharp.Dom;
+using CarteScolaire.Data.Responses;
 using CarteScolaire.Data.Services;
 using CarteScolaire.DataImpl.Helpers;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace CarteScolaire.DataImpl.Services.TokenProviders;
+
+#pragma warning disable CA2007
 
 internal sealed class TokenProvider(
     HttpClient httpClient,
@@ -17,38 +21,46 @@ internal sealed class TokenProvider(
 
     public async Task<string> GetTokenAsync(CancellationToken cancellationToken = default)
     {
-        if (httpClient.BaseAddress is not null)
-            return await GetTokenThenParseAsync(cancellationToken);
+        if (httpClient.BaseAddress is null)
+        {
+            logger.LogWarning("BaseAddress is not set on the HttpClient.");
+            throw new UriFormatException("BaseAddress is not set on the HttpClient.");
+        }
 
-        logger.LogWarning("BaseAddress is not set on the HttpClient.");
-        throw new UriFormatException("BaseAddress is not set on the HttpClient.");
+        return await GetTokenThenParseAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<string> GetTokenThenParseAsync(CancellationToken cancellationToken)
     {
-        logger.LogInformation("Initiating fetch for CSRF token from {BaseAddress} at {Path}", httpClient.BaseAddress, _options.TokenEndpointPath);
+        logger.LogInformation("Initiating fetch for CSRF token from {BaseAddress} at {Path}",
+            httpClient.BaseAddress, _options.TokenEndpointPath);
 
-        var sw = Stopwatch.StartNew();
+        Stopwatch sw = Stopwatch.StartNew();
 
-        using var response = await httpClient
-            .GetAsync(_options.TokenEndpointPath, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+        using HttpResponseMessage response = await httpClient
+            .GetAsync(new Uri(_options.TokenEndpointPath, UriKind.Relative),
+                      HttpCompletionOption.ResponseHeadersRead,
+                      cancellationToken)
             .ConfigureAwait(false);
 
         response.EnsureSuccessStatusCode();
 
-        var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        await using Stream stream = await response.Content
+            .ReadAsStreamAsync(cancellationToken)
+            .ConfigureAwait(false);
 
-        using var document = await browsingContext
-            .OpenAsync(req => req.Content(stream, shouldDispose: true), cancellationToken)
+        using IDocument document = await browsingContext
+            .OpenAsync(req => req.Content(stream), cancellationToken)
             .ConfigureAwait(false);
 
         logger.LogDebug("HTML document parsed successfully in {@ParseTime}", sw.Elapsed);
 
-        var parseResult = document
+        Result<string> parseResult = document
             .QuerySelector(_options.TokenSelector)
             .ToResult($"CSRF token element not found. Selector: {_options.TokenSelector}")
-            .Bind(element => element.GetAttribute("value").ToResult("CSRF token element found but value is missing"))
-            .Ensure(token => !string.IsNullOrWhiteSpace(token), "CSRF token element found but value is empty or missing");
+            .Bind(element => element.GetAttribute("value")
+                .ToResult("CSRF token element found but value is missing"))
+            .Ensure(token => !string.IsNullOrWhiteSpace(token), "CSRF token element found but value is empty");
 
         sw.Stop();
 
