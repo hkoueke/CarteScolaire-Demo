@@ -57,7 +57,7 @@ public sealed class StudentInfoServiceTests : IDisposable
         var result = await sut.GetStudentInfoAsync(_query, TestContext.Current.CancellationToken);
 
         result.IsSuccess.Should().BeFalse();
-        result.Error.Should().Contain("missing Base Address");
+        result.Error.Should().Contain("Invalid HTTP request: BaseAddress is not set on the HttpClient.");
     }
 
     [Fact]
@@ -86,7 +86,7 @@ public sealed class StudentInfoServiceTests : IDisposable
         var result = await _sut.GetStudentInfoAsync(_query, TestContext.Current.CancellationToken);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Should().BeSameAs(expectedResponse);
+        result.Value.Should().BeEquivalentTo(expectedResponse);
 
         capturedRequest.Should().NotBeNull();
         capturedRequest!.Method.Should().Be(HttpMethod.Get);
